@@ -82,7 +82,11 @@ This node requires API keys for the services it uses. You can enter them directl
 <a name="polski"></a>
 ## 🇵🇱 Polski
 
-**Scene Gen** to zaawansowany węzeł (node) dla ComfyUI, który automatyzuje tworzenie teledysków i scen wideo bezpośrednio z pliku audio. Wykorzystuje moc **Google Gemini 3 Pro** do głębokiej analizy dźwięku, pisania scenariuszy i generowania zasobów, oraz integruje się z **Replicate**, aby tworzyć wysokiej jakości klipy wideo przy użyciu najnowszych modeli, takich jak Wan, Kling, Hailuo czy Veo.
+**Scene Gen** to zaawansowany węzeł (node) dla ComfyUI, który automatyzuje tworzenie teledysków i scen wideo bezpośrednio z pliku audio.
+
+[![Demo Wideo](https://img.youtube.com/vi/wtxXUM1-4F8/0.jpg)](https://www.youtube.com/shorts/wtxXUM1-4F8)
+
+Wykorzystuje moc **Google Gemini 3 Pro** do głębokiej analizy dźwięku, pisania scenariuszy i generowania zasobów, oraz integruje się z **Replicate**, aby tworzyć wysokiej jakości klipy wideo przy użyciu najnowszych modeli, takich jak Wan, Kling, Hailuo czy Veo.
 
 ### ✨ Główne Funkcje
 
