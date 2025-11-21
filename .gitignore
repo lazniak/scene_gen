@@ -1,0 +1,14 @@
+# Ignore everything by default to exclude installed libraries in root
+*
+
+# Unignore project files
+!__init__.py
+!scene_gen_node.py
+!manifest.json
+!requirements.txt
+!README.md
+!*.md
+!.gitignore
+
+# Keep .git directory (git handles this automatically usually, but good to be safe if I messed with *)
+!.git/
