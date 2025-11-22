@@ -20,11 +20,17 @@ import time
 import webbrowser
 import base64
 import folder_paths
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import threading
+import socket
 
 class SceneGenNode:
     def __init__(self):
         # Locate ComfyUI output directory
         self.output_dir = folder_paths.get_output_directory()
+        self.cancel_event = threading.Event()
+        self.cancel_server = None
+        self.cancel_port = None
 
     @classmethod
     def INPUT_TYPES(s):
@@ -153,6 +159,48 @@ class SceneGenNode:
             "generated_assets": [],
             "generated_segments": []
         }
+        
+        # Reset cancel event for new run
+        self.cancel_event.clear()
+        
+        # Start Cancel HTTP Server
+        def find_free_port():
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(('', 0))
+                s.listen(1)
+                port = s.getsockname()[1]
+            return port
+        
+        self.cancel_port = find_free_port()
+        
+        class CancelHandler(BaseHTTPRequestHandler):
+            def do_POST(handler_self):
+                if handler_self.path == '/cancel':
+                    self.cancel_event.set()
+                    print("[SceneGen] Cancel requested via HTTP endpoint")
+                    handler_self.send_response(200)
+                    handler_self.send_header('Content-type', 'text/plain')
+                    handler_self.send_header('Access-Control-Allow-Origin', '*')
+                    handler_self.end_headers()
+                    handler_self.wfile.write(b'Cancelled')
+                else:
+                    handler_self.send_response(404)
+                    handler_self.end_headers()
+            
+            def do_OPTIONS(handler_self):
+                handler_self.send_response(200)
+                handler_self.send_header('Access-Control-Allow-Origin', '*')
+                handler_self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+                handler_self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+                handler_self.end_headers()
+            
+            def log_message(handler_self, format, *args):
+                pass  # Suppress HTTP server logs
+        
+        self.cancel_server = HTTPServer(('localhost', self.cancel_port), CancelHandler)
+        server_thread = threading.Thread(target=self.cancel_server.serve_forever, daemon=True)
+        server_thread.start()
+        print(f"[SceneGen] Cancel server running on http://localhost:{self.cancel_port}")
 
         # --- Live Reporting Setup ---
         # --- Live Reporting Setup ---
@@ -217,6 +265,11 @@ class SceneGenNode:
                     f.write(js_content)
             except Exception as e:
                 print(f"Report Update Error: {e}")
+        
+        def check_cancelled():
+            if self.cancel_event.is_set():
+                update_report("Cancelled", report_state.get("progress", 0), "Generation cancelled by user")
+                raise InterruptedError("Generation cancelled by user")
 
         # Create HTML File IMMEDIATELY
         html_content = f"""
@@ -307,6 +360,10 @@ class SceneGenNode:
         .btn-action {{ background: #4caf50; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; text-decoration: none; display: inline-block; margin-top: 10px; }}
         .btn-action:hover {{ background: #45a049; }}
         .btn-action.disabled {{ background: #333; color: #555; cursor: not-allowed; pointer-events: none; }}
+        
+        .btn-cancel {{ background: #f44336; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 0.9rem; transition: all 0.2s; }}
+        .btn-cancel:hover {{ background: #da190b; transform: scale(1.05); }}
+        .btn-cancel.hidden {{ display: none; }}
 
         /* Help System */
         .card {{ position: relative; }}
@@ -355,6 +412,7 @@ class SceneGenNode:
                 <div id="progress" class="progress-bar"></div>
             </div>
             <div id="progress-text">0%</div>
+            <button id="btn-cancel" class="btn-cancel" onclick="cancelGeneration()">⏹ Cancel</button>
         </div>
         
         <!-- Final Video Section -->
@@ -521,6 +579,29 @@ class SceneGenNode:
     <script>
         const jsPath = '{js_filename}';
         const sessionPath = '{js_session_path}';
+        const cancelPort = {self.cancel_port};
+        
+        function cancelGeneration() {{
+            if (!confirm('Cancel generation? This will stop all tasks immediately.')) {{
+                return;
+            }}
+            
+            fetch(`http://localhost:${{cancelPort}}/cancel`, {{
+                method: 'POST'
+            }})
+            .then(response => {{
+                if (response.ok) {{
+                    document.getElementById('status').innerText = 'Cancelled by user';
+                    document.getElementById('status').style.color = '#f44336';
+                    document.getElementById('btn-cancel').classList.add('hidden');
+                    alert('Generation cancelled. ComfyUI will proceed to the next step.');
+                }}
+            }})
+            .catch(err => {{
+                console.error('Cancel request failed:', err);
+                alert('Failed to cancel. Try using ComfyUI\\'s native Cancel button.');
+            }});
+        }}
         
         const helpContent = {{
             "final_video": {{
@@ -912,14 +993,13 @@ class SceneGenNode:
         if use_veo_3_1: available_models.append("google/veo-3.1")
         if use_veo_3_1_fast: available_models.append("google/veo-3.1-fast")
         
-        if not available_models:
-            print("[SceneGen] No video models selected. Forcing Prompt Mode (Slideshow only).")
-            render_mode = "Prompt Mode"
-            # We add a dummy model just so the prompt logic doesn't break, 
-            # but we won't use it because render_mode check skips Replicate.
-            available_models.append("Slideshow") 
+        if not available_models and render_mode == "Full Render":
+            print("[SceneGen] No video models selected. Will generate images only (slideshow mode).")
+        elif not available_models and render_mode == "Prompt Mode":
+            print("[SceneGen] Prompt Mode: Skipping all image and video generation.") 
 
         # --- STAGE 1: Audio Analysis ---
+        check_cancelled()
         update_report("Stage 1: Analyzing Audio...", 5, "Sending audio to Gemini for analysis...")
         print("[SceneGen] Stage 1: Audio Analysis...")
         prompt_s1 = f"""
@@ -1110,6 +1190,7 @@ class SceneGenNode:
         completed = set(asset_library.keys())
         
         while pending:
+            check_cancelled()  # Allow cancel during asset generation
             ready = []
             for name, data in pending.items():
                 p = data.get("parent_asset")
@@ -1141,6 +1222,26 @@ class SceneGenNode:
         # --- STAGE 5: Montage Line ---
         update_report("Stage 5: Creating Montage...", 35, "Structuring video timeline...")
         print("[SceneGen] Stage 5: Montage Line...")
+        
+        # Build model instruction based on availability
+        if available_models:
+            model_instruction = f"""
+        - Available Models: {json.dumps(available_models)}
+        For each scene, choose a model and duration:
+        - Wan/Kling: 5s or 10s.
+        - Hailuo: 6s or 10s (Note: 10s is 768p only).
+        - Veo: 4s, 6s, 8s.
+        - OmniHuman: Any.
+        - Specify "model": string (name from Available Models list)
+        - Specify "duration": float (Generation duration, e.g. 5.0)
+            """
+        else:
+            model_instruction = """
+        - No video models available (slideshow mode).
+        - For each scene, use "model": "Slideshow"
+        - Specify "duration": float (how long this image should be shown, e.g. 3.0-5.0s)
+            """
+        
         prompt_s5 = f"""
         Create a video montage JSON.
         Context:
@@ -1148,17 +1249,12 @@ class SceneGenNode:
         - Analysis: {debug_s1}
         - Style: {style_instruction}
         - Assets Available: {json.dumps(available_assets_summary)}
-        - Available Models: {json.dumps(available_models)}
         - Dynamicity: {dynamicity} (0-1)
         - Aggressive Edit: {aggressive_edit} (Boolean)
+        {model_instruction}
         
         Task:
         Create a list of scenes that strictly sums to {total_duration_sec}s.
-        For each scene, choose a model and duration.
-        - Wan/Kling: 5s or 10s.
-        - Hailuo: 6s or 10s (Note: 10s is 768p only).
-        - Veo: 4s, 6s, 8s.
-        - OmniHuman: Any.
         
         If Aggressive Edit is True:
         - Create a fast-paced montage with frequent cuts (short target durations).
@@ -1167,11 +1263,9 @@ class SceneGenNode:
         - Ensure cuts are strictly synchronized to the beat/dramaturgy.
         
         Return JSON object with "scenes": list of objects:
-        - "duration": float (Generation duration, e.g. 5.0)
+        - "duration": float (as specified above)
         - "trim_duration": float (Actual edit duration, e.g. 2.5. If not aggressive, same as duration)
-        - "model": string
-        - "clue": simple description of the shot content.
-        - "model": string
+        - "model": string (as specified above)
         - "clue": simple description of the shot content.
         - "asset_refs": list of strings (names of assets from Assets Available to use). IMPORTANT: Use the EXACT "name" string from the Assets Available list (e.g., "Gen_Env_0", "Gen_Actor_1"). Do not invent new names.
         """
@@ -1508,7 +1602,7 @@ class SceneGenNode:
         
         video_paths = [None] * len(replicate_tasks)
         
-        if render_mode == "Full Render":
+        if render_mode == "Full Render" and available_models:
             def run_replicate(task):
                 idx = task["index"]
                 print(f"Task {idx} ({task['model']}) starting...")
