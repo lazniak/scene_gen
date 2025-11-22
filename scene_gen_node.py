@@ -311,12 +311,14 @@ class SceneGenNode:
 
         /* Timeline */
         .timeline-wrapper {{ overflow-x: auto; padding-bottom: 10px; }}
-        .timeline {{ display: flex; height: 120px; background: #222; border-radius: 5px; position: relative; min-width: 100%; }}
-        .timeline-segment {{ position: relative; height: 100%; border-right: 1px solid #444; overflow: hidden; transition: flex 0.3s; min-width: 40px; }}
-        .timeline-segment:hover {{ filter: brightness(1.2); }}
-        .timeline-segment img {{ width: 100%; height: 100%; object-fit: cover; opacity: 0.6; }}
-        .timeline-segment .seg-label {{ position: absolute; bottom: 5px; left: 5px; font-size: 0.7rem; background: rgba(0,0,0,0.7); padding: 2px 4px; border-radius: 3px; pointer-events: none; }}
-        .timeline-segment .seg-time {{ position: absolute; top: 5px; left: 5px; font-size: 0.6rem; color: #aaa; pointer-events: none; }}
+        .timeline {{ display: flex; height: 150px; background: #222; border-radius: 5px; position: relative; min-width: 100%; }}
+        .timeline-segment {{ position: relative; height: 100%; border-right: 1px solid #444; overflow: hidden; transition: all 0.3s; min-width: 50px; cursor: pointer; }}
+        .timeline-segment:hover {{ filter: brightness(1.3); transform: scale(1.02); z-index: 10; box-shadow: 0 4px 8px rgba(0,0,0,0.5); }}
+        .timeline-segment img {{ width: 100%; height: 100%; object-fit: cover; object-position: center; }}
+        .timeline-segment .seg-label {{ position: absolute; bottom: 5px; left: 5px; font-size: 0.7rem; background: rgba(0,0,0,0.8); padding: 3px 6px; border-radius: 3px; pointer-events: none; color: #fff; font-weight: bold; }}
+        .timeline-segment .seg-time {{ position: absolute; top: 5px; right: 5px; font-size: 0.65rem; background: rgba(76,175,80,0.8); color: white; padding: 2px 5px; border-radius: 3px; pointer-events: none; font-weight: bold; }}
+        .timeline-segment .seg-info {{ position: absolute; bottom: 25px; left: 5px; right: 5px; font-size: 0.6rem; background: rgba(0,0,0,0.7); padding: 2px 4px; border-radius: 2px; color: #ccc; max-height: 0; overflow: hidden; transition: max-height 0.3s; }}
+        .timeline-segment:hover .seg-info {{ max-height: 60px; }}
 
         /* Data Visualization */
         .data-display {{ font-size: 0.9rem; color: #ccc; max-height: 300px; overflow-y: auto; }}
@@ -332,11 +334,12 @@ class SceneGenNode:
         .log-box {{ background: #000; font-family: 'Consolas', monospace; padding: 10px; height: 200px; overflow-y: auto; border-radius: 5px; font-size: 0.85rem; color: #aaa; }}
         .log-entry {{ margin-bottom: 5px; border-bottom: 1px solid #222; padding-bottom: 2px; }}
         
-        .gallery {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; max-height: 300px; overflow-y: auto; }}
-        .gallery-item {{ position: relative; border-radius: 5px; overflow: hidden; aspect-ratio: 16/9; background: #333; transition: transform 0.2s; }}
-        .gallery-item:hover {{ transform: scale(1.05); z-index: 5; }}
+        .gallery {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; max-height: 400px; overflow-y: auto; padding: 5px; }}
+        .gallery-item {{ position: relative; border-radius: 8px; overflow: hidden; aspect-ratio: 16/9; background: #333; transition: all 0.3s; cursor: zoom-in; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }}
+        .gallery-item:hover {{ transform: scale(1.05); z-index: 5; box-shadow: 0 8px 20px rgba(0,0,0,0.6); }}
         .gallery-item img, .gallery-item video {{ width: 100%; height: 100%; object-fit: cover; }}
-        .gallery-item .label {{ position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.7); font-size: 0.6rem; padding: 2px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+        .gallery-item .label {{ position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(0,0,0,0.9)); font-size: 0.7rem; padding: 15px 5px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }}
+        .gallery-item .badge {{ position: absolute; top: 5px; left: 5px; background: rgba(76,175,80,0.9); color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.6rem; font-weight: bold; }}
         
         .cost-table {{ width: 100%; border-collapse: collapse; font-size: 0.9rem; }}
         .cost-table td, .cost-table th {{ padding: 8px; border-bottom: 1px solid #333; text-align: left; }}
@@ -387,6 +390,18 @@ class SceneGenNode:
         .close-modal:hover {{ color: white; }}
         .modal h2 {{ margin-top: 0; color: #4caf50; border-bottom: 1px solid #333; padding-bottom: 10px; }}
         .modal p {{ line-height: 1.6; color: #ccc; }}
+        
+        /* Lightbox */
+        .lightbox {{ display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.95); backdrop-filter: blur(10px); }}
+        .lightbox-content {{ position: relative; margin: auto; padding: 20px; max-width: 95vw; max-height: 95vh; display: flex; align-items: center; justify-content: center; height: 100%; }}
+        .lightbox-content img, .lightbox-content video {{ max-width: 100%; max-height: 90vh; object-fit: contain; border-radius: 5px; box-shadow: 0 10px 50px rgba(0,0,0,0.8); }}
+        .lightbox-close {{ position: absolute; top: 20px; right: 40px; color: white; font-size: 40px; font-weight: bold; cursor: pointer; z-index: 2001; transition: color 0.2s; }}
+        .lightbox-close:hover {{ color: #f44336; }}
+        .lightbox-nav {{ position: absolute; top: 50%; transform: translateY(-50%); color: white; font-size: 40px; font-weight: bold; cursor: pointer; padding: 20px; background: rgba(0,0,0,0.5); border-radius: 5px; transition: all 0.2s; user-select: none; }}
+        .lightbox-nav:hover {{ background: rgba(76,175,80,0.8); }}
+        .lightbox-prev {{ left: 20px; }}
+        .lightbox-next {{ right: 20px; }}
+        .lightbox-caption {{ position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); color: white; background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 5px; font-size: 1rem; max-width: 80%; text-align: center; }}
 
     </style>
 </head>
@@ -575,6 +590,18 @@ class SceneGenNode:
             <div id="helpBody"></div>
         </div>
     </div>
+    
+    <!-- Lightbox Modal -->
+    <div id="lightbox" class="lightbox">
+        <span class="lightbox-close" onclick="closeLightbox()">&times;</span>
+        <div class="lightbox-prev lightbox-nav" onclick="navigateLightbox(-1)">&#10094;</div>
+        <div class="lightbox-next lightbox-nav" onclick="navigateLightbox(1)">&#10095;</div>
+        <div class="lightbox-content">
+            <img id="lightbox-img" style="display:none;">
+            <video id="lightbox-video" controls style="display:none;"></video>
+        </div>
+        <div class="lightbox-caption" id="lightbox-caption"></div>
+    </div>
 
     <script>
         const jsPath = '{js_filename}';
@@ -664,10 +691,76 @@ class SceneGenNode:
         }}
         
         window.onclick = function(event) {{
-            if (event.target == document.getElementById('helpModal')) {{
+            const helpModal = document.getElementById('helpModal');
+            const lightboxModal = document.getElementById('lightbox');
+            if (event.target == helpModal) {{
                 closeHelp();
             }}
+            if (event.target == lightboxModal) {{
+                closeLightbox();
+            }}
         }}
+        
+        // Lightbox functionality
+        let lightboxItems = [];
+        let currentLightboxIndex = 0;
+        
+        function openLightbox(src, caption, type = 'image', allItems = []) {{
+            const lightbox = document.getElementById('lightbox');
+            const img = document.getElementById('lightbox-img');
+            const video = document.getElementById('lightbox-video');
+            const captionEl = document.getElementById('lightbox-caption');
+            
+            lightboxItems = allItems.length > 0 ? allItems : [{{src, caption, type}}];
+            currentLightboxIndex = lightboxItems.findIndex(item => item.src === src);
+            if (currentLightboxIndex === -1) currentLightboxIndex = 0;
+            
+            showLightboxItem();
+            lightbox.style.display = 'block';
+        }}
+        
+        function showLightboxItem() {{
+            const item = lightboxItems[currentLightboxIndex];
+            const img = document.getElementById('lightbox-img');
+            const video = document.getElementById('lightbox-video');
+            const captionEl = document.getElementById('lightbox-caption');
+            
+            if (item.type === 'video') {{
+                img.style.display = 'none';
+                video.style.display = 'block';
+                video.src = item.src;
+            }} else {{
+                video.style.display = 'none';
+                img.style.display = 'block';
+                img.src = item.src;
+            }}
+            
+            captionEl.textContent = item.caption;
+        }}
+        
+        function closeLightbox() {{
+            const lightbox = document.getElementById('lightbox');
+            const video = document.getElementById('lightbox-video');
+            lightbox.style.display = 'none';
+            video.pause();
+        }}
+        
+        function navigateLightbox(direction) {{
+            currentLightboxIndex += direction;
+            if (currentLightboxIndex < 0) currentLightboxIndex = lightboxItems.length - 1;
+            if (currentLightboxIndex >= lightboxItems.length) currentLightboxIndex = 0;
+            showLightboxItem();
+        }}
+        
+        // Keyboard navigation for lightbox
+        document.addEventListener('keydown', function(e) {{
+            const lightbox = document.getElementById('lightbox');
+            if (lightbox.style.display === 'block') {{
+                if (e.key === 'Escape') closeLightbox();
+                if (e.key === 'ArrowLeft') navigateLightbox(-1);
+                if (e.key === 'ArrowRight') navigateLightbox(1);
+            }}
+        }});
 
         function formatCost(stats) {{
             const P_GEM_IN = 3.50 / 1000000;
@@ -699,7 +792,7 @@ class SceneGenNode:
                     <tr><td>Gemini Images</td><td>${{stats.gemini_images_generated}}</td><td>$${{(stats.gemini_images_generated * P_GEM_IMG).toFixed(4)}}</td></tr>
                     ${{rep_html}}
                 </table>
-                <div class="total-cost">Total: $${{total.toFixed(4)}}</div>
+                <div class="total-cost">Total: $${{total.toFixed(2)}}</div>
             `;
         }}
 
@@ -763,9 +856,17 @@ class SceneGenNode:
                 }}
                 
                 if (imgUrl) {{
-                    div.innerHTML = `<img src="${{imgUrl}}"><div class="seg-label">Sc ${{idx}}</div><div class="seg-time">${{dur}}s</div>`;
+                    const promptText = seg.video_trigger_prompt || seg.description || 'Scene ' + idx;
+                    div.innerHTML = `
+                        <img src="${{imgUrl}}">
+                        <div class="seg-label">Sc ${{idx}}</div>
+                        <div class="seg-time">${{dur}}s</div>
+                        <div class="seg-info">${{promptText.substring(0, 80)}}...</div>
+                    `;
+                    div.onclick = () => openLightbox(imgUrl, `Scene ${{idx}}: ${{seg.description || 'No description'}}`, 'image');
                 }} else {{
                     div.innerHTML = `<div class="seg-label">Sc ${{idx}}</div><div class="seg-time">${{dur}}s</div>`;
+                    div.onclick = () => openLightbox(imgUrl, `Scene ${{idx}}: ${{seg.description || 'No description'}}`, 'image');
                     div.style.background = `hsl(${{idx * 40}}, 50%, 30%)`;
                 }}
                 
@@ -867,13 +968,12 @@ class SceneGenNode:
                 // For simplicity, we rebuild the HTML string and update if different
                 let newHtml = '';
                 for (const [type, list] of Object.entries(assetsByType)) {{
-                    const itemsHtml = list.map(a => `
-                        <div class="gallery-item" title="${{a.name}}">
+                    const allAssets = list.map(a => ({{src: sessionPath + a.file, caption: `${{a.name}} (${{type}})`, type: 'image'}}));
+                    const itemsHtml = list.map((a, idx) => `
+                        <div class="gallery-item" onclick="openLightbox('${{sessionPath + a.file}}', '${{a.name}} (${{type}})', 'image', ${{JSON.stringify(allAssets)}})" title="Click to view full size">
                             <img src="${{sessionPath + a.file}}" loading="lazy">
+                            <div class="badge">${{type}}</div>
                             <div class="label">${{a.name}}</div>
-                            <div class="overlay">
-                                <a href="${{sessionPath + a.file}}" download class="download-icon" title="Download Asset">⬇️</a>
-                            </div>
                         </div>
                     `).join('');
                     
@@ -887,15 +987,14 @@ class SceneGenNode:
                 if (assetsContainer.innerHTML !== newHtml) assetsContainer.innerHTML = newHtml;
             }}
             
-            // Videos with Download
-            const vidsHtml = data.videos.map(v => `
-                <div class="gallery-item" title="Segment ${{v.index}}">
-                    <video src="${{sessionPath + v.file}}" controls preload="none"></video>
-                    <div class="label">Seg ${{v.index}}</div>
-                    <div class="overlay" style="pointer-events:none;">
-                        <!-- Overlay blocks controls, so we position button carefully or just use link below -->
-                    </div>
-                    <a href="${{sessionPath + v.file}}" download class="download-icon" style="position:absolute; top:5px; right:5px; padding:5px; font-size:1rem;" title="Download Clip">⬇️</a>
+            // Videos with Download and Lightbox
+            const allVideos = data.videos.map(v => ({{src: sessionPath + v.file, caption: `Segment ${{v.index}}`, type: 'video'}}));
+            const vidsHtml = data.videos.map((v, idx) => `
+                <div class="gallery-item" onclick="openLightbox('${{sessionPath + v.file}}', 'Segment ${{v.index}}', 'video', ${{JSON.stringify(allVideos)}})" title="Click to view full screen">
+                    <video src="${{sessionPath + v.file}}" preload="metadata"></video>
+                    <div class="badge">Seg ${{v.index}}</div>
+                    <div class="label">Segment ${{v.index}}</div>
+                    <a href="${{sessionPath + v.file}}" download class="download-icon" style="position:absolute; top:5px; right:5px; padding:5px; font-size:1rem; z-index:100;" title="Download" onclick="event.stopPropagation();">⬇️</a>
                 </div>
             `).join('');
             if (document.getElementById('videos-gallery').innerHTML !== vidsHtml)
@@ -1512,7 +1611,7 @@ class SceneGenNode:
             if new_prompt:
                 final_scenes[idx]["video_trigger_prompt"] = new_prompt
                 
-        debug_s8 = json.dumps([{"scene": i, "motion": p} for i, p in refined_results], indent=2)
+        debug_s8 = json.dumps([{"scene": i, "motion": p} for i, p in refined_results], indent=2) if refined_results else "[]"
         with open(os.path.join(session_dir, "stage8_prompts_status.txt"), "w", encoding="utf-8") as f: f.write(debug_s8)
         report_state["motion"] = debug_s8
         # Update montage with new prompts
