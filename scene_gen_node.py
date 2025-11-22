@@ -1138,7 +1138,16 @@ class SceneGenNode:
         debug_s2 = resp_s2.text
         track_text("", debug_s2)
         with open(os.path.join(session_dir, "stage2_style.json"), "w", encoding="utf-8") as f: f.write(debug_s2)
-        style_instruction = json.loads(self._clean_json(debug_s2)).get("style_instruction", "")
+        
+        try:
+            style_instruction = json.loads(self._clean_json(debug_s2)).get("style_instruction", "")
+        except json.JSONDecodeError as e:
+            print(f"[SceneGen] JSON Error in Stage 2: {e}")
+            print(f"[SceneGen] Raw output: {debug_s2[:200]}...")
+            # Fallback: use raw text as style instruction
+            style_instruction = debug_s2.strip()
+            update_report("Stage 2 Warning", 12, "Failed to parse style JSON. Using raw text.")
+        
         report_state["style"] = {"style_instruction": style_instruction}
         update_report(None, None, "Style defined.")
 
@@ -1158,7 +1167,16 @@ class SceneGenNode:
         debug_s3 = resp_s3.text
         track_text("", debug_s3)
         with open(os.path.join(session_dir, "stage3_palette.json"), "w", encoding="utf-8") as f: f.write(debug_s3)
-        palette_data = json.loads(self._clean_json(debug_s3))
+        
+        try:
+            palette_data = json.loads(self._clean_json(debug_s3))
+        except json.JSONDecodeError as e:
+            print(f"[SceneGen] JSON Error in Stage 3: {e}")
+            print(f"[SceneGen] Raw output: {debug_s3[:200]}...")
+            # Fallback: default palette
+            palette_data = {"palette": ["#1a1a1a", "#333333", "#4a4a4a", "#666666", "#808080"]}
+            update_report("Stage 3 Warning", 17, "Failed to parse palette JSON. Using default colors.")
+        
         report_state["palette"] = palette_data
         update_report(None, None, "Palette generated.")
 
@@ -1373,7 +1391,21 @@ class SceneGenNode:
         debug_s5 = resp_s5.text
         track_text("", debug_s5)
         with open(os.path.join(session_dir, "stage5_montage.json"), "w", encoding="utf-8") as f: f.write(debug_s5)
-        montage_data = json.loads(self._clean_json(debug_s5)).get("scenes", [])
+        
+        try:
+            montage_data = json.loads(self._clean_json(debug_s5)).get("scenes", [])
+        except json.JSONDecodeError as e:
+            print(f"[SceneGen] JSON Error in Stage 5: {e}")
+            print(f"[SceneGen] Raw output: {debug_s5[:200]}...")
+            # Fallback: create a single default scene
+            montage_data = [{
+                "duration": total_duration_sec,
+                "trim_duration": total_duration_sec,
+                "model": available_models[0] if available_models else "Slideshow",
+                "clue": "Default scene due to parsing error",
+                "asset_refs": []
+            }]
+            update_report("Stage 5 Warning", 37, "Failed to parse montage JSON. Using single default scene.")
 
         # --- STAGE 6: Prompt Engineering (Batched) ---
         update_report("Stage 6: Writing Prompts...", 45, "Expanding scene details...")
