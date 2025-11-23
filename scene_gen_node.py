@@ -1864,6 +1864,8 @@ class SceneGenNode:
         
         if render_mode == "Full Render":
             valid_videos = [(i, v) for i, v in enumerate(video_paths) if v is not None]
+            
+            # --- VIDEO STITCHING ---
             if valid_videos:
                 concat_list = os.path.join(session_dir, "concat.txt")
                 norm_videos = []
@@ -1894,6 +1896,59 @@ class SceneGenNode:
                         "ffmpeg", "-y", "-i", silent_path, "-i", original_audio_path,
                         "-c:v", "copy", "-c:a", "aac", "-map", "0:v:0", "-map", "1:a:0", "-shortest", final_video_path
                     ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+            # --- SLIDESHOW FALLBACK ---
+            else:
+                # Check if we have start frames to make a slideshow
+                start_frames = [a for a in report_state["assets"] if a["type"] == "Start Frame"]
+                if start_frames:
+                    print("[SceneGen] No video segments found. Generating slideshow from Start Frames...")
+                    concat_list = os.path.join(session_dir, "concat_slideshow.txt")
+                    norm_videos = []
+                    target_w, target_h = img_w, img_h
+                    
+                    # Sort by scene index (assuming name is "Scene X")
+                    # We need to match frames to scene durations
+                    # final_scenes has the duration info
+                    
+                    for idx, scene in enumerate(final_scenes):
+                        # Find matching frame
+                        frame = next((f for f in start_frames if f["name"] == f"Scene {idx}"), None)
+                        if frame:
+                            img_path = os.path.join(session_dir, frame["file"])
+                            dur = float(scene.get("duration", 5))
+                            norm = os.path.join(session_dir, f"slide_{idx:03d}.mp4")
+                            
+                            # Create video clip from image with specific duration
+                            cmd = [
+                                "ffmpeg", "-y", "-loop", "1", "-i", img_path, "-t", str(dur),
+                                "-vf", f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease,pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2",
+                                "-r", "24", "-c:v", "libx264", "-crf", "23", "-preset", "fast", "-pix_fmt", "yuv420p", "-an", norm
+                            ]
+                            try:
+                                subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                norm_videos.append(norm)
+                            except Exception as e:
+                                print(f"Slideshow frame error {idx}: {e}")
+
+                    if norm_videos:
+                        with open(concat_list, "w") as f:
+                            for n in norm_videos: f.write(f"file '{n.replace(os.sep, '/')}'\n")
+                        
+                        silent_path = os.path.join(session_dir, "silent_slideshow.mp4")
+                        subprocess.run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", concat_list, "-c", "copy", silent_path], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                        
+                        # Mux with original audio
+                        subprocess.run([
+                            "ffmpeg", "-y", "-i", silent_path, "-i", original_audio_path,
+                            "-c:v", "copy", "-c:a", "aac", "-map", "0:v:0", "-map", "1:a:0", "-shortest", final_video_path
+                        ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                        
+                        # Cleanup slides
+                        if not save_segments:
+                            for n in norm_videos: 
+                                try: os.unlink(n)
+                                except: pass
                     
                     # Cleanup
                     if not save_segments:
