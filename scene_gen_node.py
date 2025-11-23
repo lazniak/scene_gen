@@ -704,14 +704,24 @@ class SceneGenNode:
         // Lightbox functionality
         let lightboxItems = [];
         let currentLightboxIndex = 0;
+        let galleryAssets = {{}};
+        let galleryVideos = [];
         
-        function openLightbox(src, caption, type = 'image', allItems = []) {{
+        function openLightbox(src, caption, type = 'image', galleryId = null) {{
             const lightbox = document.getElementById('lightbox');
             const img = document.getElementById('lightbox-img');
             const video = document.getElementById('lightbox-video');
             const captionEl = document.getElementById('lightbox-caption');
             
-            lightboxItems = allItems.length > 0 ? allItems : [{{src, caption, type}}];
+            // Get items from global gallery arrays
+            if (galleryId && galleryAssets[galleryId]) {{
+                lightboxItems = galleryAssets[galleryId];
+            }} else if (galleryId === 'videos') {{
+                lightboxItems = galleryVideos;
+            }} else {{
+                lightboxItems = [{{src, caption, type}}];
+            }}
+            
             currentLightboxIndex = lightboxItems.findIndex(item => item.src === src);
             if (currentLightboxIndex === -1) currentLightboxIndex = 0;
             
@@ -720,6 +730,8 @@ class SceneGenNode:
         }}
         
         function showLightboxItem() {{
+            if (!lightboxItems[currentLightboxIndex]) return;
+            
             const item = lightboxItems[currentLightboxIndex];
             const img = document.getElementById('lightbox-img');
             const video = document.getElementById('lightbox-video');
@@ -735,7 +747,12 @@ class SceneGenNode:
                 img.src = item.src;
             }}
             
-            captionEl.textContent = item.caption;
+            // Update caption with name and prompt if available
+            let captionText = item.caption;
+            if (item.prompt) {{
+                captionText += ` | Prompt: ${{item.prompt}}`;
+            }}
+            captionEl.textContent = captionText;
         }}
         
         function closeLightbox() {{
@@ -968,9 +985,16 @@ class SceneGenNode:
                 // For simplicity, we rebuild the HTML string and update if different
                 let newHtml = '';
                 for (const [type, list] of Object.entries(assetsByType)) {{
-                    const allAssets = list.map(a => ({{src: sessionPath + a.file, caption: `${{a.name}} (${{type}})`, type: 'image'}}));
+                    // Store in global array for lightbox
+                    galleryAssets[type] = list.map(a => ({{
+                        src: sessionPath + a.file, 
+                        caption: `${{a.name}} (${{type}})`,
+                        prompt: a.prompt || '',
+                        type: 'image'
+                    }}));
+                    
                     const itemsHtml = list.map((a, idx) => `
-                        <div class="gallery-item" onclick="openLightbox('${{sessionPath + a.file}}', '${{a.name}} (${{type}})', 'image', ${{JSON.stringify(allAssets)}})" title="Click to view full size">
+                        <div class="gallery-item" onclick="openLightbox('${{sessionPath + a.file}}', '${{a.name}} (${{type}})', 'image', '${{type}}')" title="Click to view full size">
                             <img src="${{sessionPath + a.file}}" loading="lazy">
                             <div class="badge">${{type}}</div>
                             <div class="label">${{a.name}}</div>
@@ -988,9 +1012,15 @@ class SceneGenNode:
             }}
             
             // Videos with Download and Lightbox
-            const allVideos = data.videos.map(v => ({{src: sessionPath + v.file, caption: `Segment ${{v.index}}`, type: 'video'}}));
+            galleryVideos = data.videos.map(v => ({{
+                src: sessionPath + v.file, 
+                caption: `Segment ${{v.index}}`,
+                prompt: v.prompt || '',
+                type: 'video'
+            }}));
+            
             const vidsHtml = data.videos.map((v, idx) => `
-                <div class="gallery-item" onclick="openLightbox('${{sessionPath + v.file}}', 'Segment ${{v.index}}', 'video', ${{JSON.stringify(allVideos)}})" title="Click to view full screen">
+                <div class="gallery-item" onclick="openLightbox('${{sessionPath + v.file}}', 'Segment ${{v.index}}', 'video', 'videos')" title="Click to view full screen">
                     <video src="${{sessionPath + v.file}}" preload="metadata"></video>
                     <div class="badge">Seg ${{v.index}}</div>
                     <div class="label">Segment ${{v.index}}</div>
@@ -1295,7 +1325,7 @@ class SceneGenNode:
                                 fname = f"asset_{name}.png"
                                 img.save(os.path.join(session_dir, fname))
                                 usage_stats["generated_assets"].append({"name": name, "type": cat, "file": fname})
-                                report_state["assets"].append({"name": name, "type": cat, "file": fname}) # Add to report state
+                                report_state["assets"].append({"name": name, "type": cat, "file": fname, "prompt": full_prompt}) # Add to report state
                             usage_stats["gemini_images_generated"] += 1 # Track image generation
                             return (name, img, cat)
             except Exception as e:
@@ -1563,7 +1593,7 @@ class SceneGenNode:
                                     fname = f"{prefix}_scene_{idx:03d}.png"
                                     img.save(os.path.join(session_dir, fname))
                                     usage_stats["generated_assets"].append({"name": f"Scene {idx}", "type": "Start Frame", "file": fname})
-                                    report_state["assets"].append({"name": f"Scene {idx}", "type": "Start Frame", "file": fname})
+                                    report_state["assets"].append({"name": f"Scene {idx}", "type": "Start Frame", "file": fname, "prompt": prompt})
                                 usage_stats["gemini_images_generated"] += 1 # Track image generation
                                 return img
                 except Exception as e:
@@ -1796,11 +1826,11 @@ class SceneGenNode:
                             for chunk in r.iter_content(chunk_size=8192): f.write(chunk)
                     
                     # Track for report
-                    return (idx, local_path, fname)
+                    return (idx, local_path, fname, current_prompt)
                     
                 except Exception as e:
                     print(f"Task {idx} Failed: {e}")
-                    return (idx, None, None)
+                    return (idx, None, None, None)
                 finally:
                     try: os.unlink(img_path); os.unlink(aud_path)
                     except: pass
@@ -1812,11 +1842,11 @@ class SceneGenNode:
                     rep_futures.append(loop.run_in_executor(rep_exec, run_replicate, task))
                 results = await asyncio.gather(*rep_futures)
                 
-            for idx, path, fname in results:
+            for idx, path, fname, prompt in results:
                 if path: 
                     video_paths[idx] = path
                     usage_stats["generated_segments"].append({"index": idx, "file": fname})
-                    report_state["videos"].append({"index": idx, "file": fname})
+                    report_state["videos"].append({"index": idx, "file": fname, "prompt": prompt})
             
             update_report(None, 90, f"Render complete. {sum(1 for v in video_paths if v)} clips generated.")
             debug_s10 = f"Generated {sum(1 for v in video_paths if v)} videos."
