@@ -452,6 +452,10 @@ class SceneGenNode:
                 Montage Timeline
                 <a id="btn-dl-edl" href="#" class="btn-action disabled" download style="margin-left: auto;">Download EDL</a>
             </h3>
+            <div style="display: flex; align-items: center; gap: 10px; padding: 0 15px 10px 15px;">
+                <label for="timeline-zoom" style="font-size: 0.8rem; color: #aaa;">Zoom:</label>
+                <input type="range" id="timeline-zoom" min="10" max="300" value="50" style="width: 150px; cursor: pointer;">
+            </div>
             <div class="timeline-wrapper">
                 <div id="timeline" class="timeline">
                     <div style="width:100%; display:flex; align-items:center; justify-content:center; color:#555;">
@@ -483,13 +487,28 @@ class SceneGenNode:
             <div class="card">
                 <button class="help-btn" onclick="showHelp('style')">?</button>
                 <h3>
-                    <button class="copy-btn" onclick="copyData('style')" title="Copy Style JSON">📋</button>
-                    Style & Atmosphere (S2)
+                    <button class="copy-btn" onclick="copyData('style')" title="Copy Style Data">📋</button>
+                    Style Definition (S2)
                 </h3>
                 <div id="style-display" class="data-display">
                     <div class="loading-placeholder">
                         <div class="spinner"></div>
-                        <div>Defining style...</div>
+                        <div>Defining visual style...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Narrative Planning -->
+            <div class="card">
+                <button class="help-btn" onclick="showHelp('narrative')">?</button>
+                <h3>
+                    <button class="copy-btn" onclick="copyData('narrative')" title="Copy Narrative Data">📋</button>
+                    Narrative & Asset Planning (S3)
+                </h3>
+                <div id="narrative-display" class="data-display">
+                    <div class="loading-placeholder">
+                        <div class="spinner"></div>
+                        <div>Planning storyline and assets...</div>
                     </div>
                 </div>
             </div>
@@ -850,23 +869,56 @@ class SceneGenNode:
             // Only clear if it contains loading placeholder
             if (container.querySelector('.loading-placeholder')) container.innerHTML = '';
             
-            // Force re-render to ensure updates
+            // Store for re-rendering on zoom
+            lastMontage = montage;
+            lastAssets = assets;
+            renderTimeline();
+        }}
+        
+        let lastMontage = [];
+        let lastAssets = [];
+        let pixelsPerSecond = 50;
+        
+        // Initialize zoom listener
+        setTimeout(() => {{
+            const zoomSlider = document.getElementById('timeline-zoom');
+            if (zoomSlider) {{
+                zoomSlider.oninput = (e) => {{
+                    pixelsPerSecond = parseInt(e.target.value);
+                    renderTimeline();
+                }};
+            }}
+        }}, 1000);
+
+        function renderTimeline() {{
+            const montage = lastMontage;
+            const assets = lastAssets;
+            
+            if (!montage || montage.length === 0) return;
+            const container = document.getElementById('timeline');
+            if (container.querySelector('.loading-placeholder')) container.innerHTML = '';
+            
             container.innerHTML = '';
             
-            let totalDur = montage.reduce((acc, seg) => acc + (seg.duration || 4), 0);
-            if (totalDur === 0) totalDur = 1;
-
             montage.forEach((seg, idx) => {{
                 const dur = seg.duration || 4;
-                const pct = (dur / totalDur) * 100;
+                const widthPx = dur * pixelsPerSecond;
                 
                 const div = document.createElement('div');
                 div.className = 'timeline-segment';
-                div.style.width = pct + '%';
+                div.style.width = widthPx + 'px';
+                div.style.minWidth = widthPx + 'px'; // Enforce width
+                div.style.flexShrink = 0;
                 div.title = `Scene ${{idx}}: ${{seg.description}} (${{dur}}s)\nPrompt: ${{seg.video_trigger_prompt || 'Pending...'}}`;
                 
                 let imgUrl = '';
-                if (seg.assets && seg.assets.length > 0) {{
+                // Priority 1: Start Frame for this scene
+                const startFrame = assets.find(a => a.type === "Start Frame" && a.name === `Scene ${{idx}}`);
+                if (startFrame) {{
+                    imgUrl = sessionPath + startFrame.file;
+                }} 
+                // Priority 2: Explicitly assigned asset
+                else if (seg.assets && seg.assets.length > 0) {{
                     const assetName = seg.assets[0];
                     const assetObj = assets.find(a => a.name === assetName || a.name.includes(assetName));
                     if (assetObj) imgUrl = sessionPath + assetObj.file;
@@ -1049,6 +1101,7 @@ class SceneGenNode:
             renderStyle(data.style);
             renderPalette(data.palette);
             renderGenericText(data.analysis, 'analysis-display');
+            renderGenericText(data.narrative, 'narrative-display');
             renderGenericText(data.prompts, 'prompts-display');
             renderGenericText(data.motion, 'motion-display');
         }}
@@ -1181,7 +1234,56 @@ class SceneGenNode:
         report_state["style"] = {"style_instruction": style_instruction}
         update_report(None, None, "Style defined.")
 
-        # --- STAGE 3: Color Palette ---
+        # --- STAGE 3: Narrative & Asset Planning ---
+        update_report("Stage 3: Narrative Planning...", 15, "Developing storyline and asset list...")
+        print("[SceneGen] Stage 3: Narrative & Asset Planning...")
+        
+        prompt_s3_plan = f"""
+        You are a visionary Director and Screenwriter. Based on the Audio Analysis and Style, create a comprehensive Narrative Plan and Asset List.
+        
+        Audio Analysis: {debug_s1}
+        Style: {style_instruction}
+        User Instruction: "{instruction}"
+        
+        TASK:
+        1. Create a detailed Storyline that fits the audio's mood and lyrics.
+        2. Define ALL necessary Assets (Actors, Props, Locations). NO LIMITS. If the story needs 5 side characters, define them.
+        3. Plan dependencies: Props -> Actors (holding props) -> Locations (containing props).
+        4. Define Variants: If an actor changes clothes, define a variant. If a location changes time/weather, define a variant.
+        
+        REQUIREMENTS:
+        - "assets": A list of ALL assets.
+          - "name": Unique ID (e.g., "Hero_John", "Prop_Sword", "Loc_Cave").
+          - "category": "Actor", "Prop", or "Location".
+          - "description": Visual description matching the Style.
+          - "parent_asset": If this is a variant or depends on another asset (e.g., Actor holding Prop), name the parent.
+        
+        Return JSON:
+        {{
+            "storyline": "Detailed narrative...",
+            "assets": [
+                {{"name": "...", "category": "...", "description": "...", "parent_asset": null}},
+                ...
+            ]
+        }}
+        """
+        track_text(prompt_s3_plan, "")
+        resp_s3_plan = await model_text.generate_content_async(prompt_s3_plan)
+        debug_s3_plan = resp_s3_plan.text
+        track_text("", debug_s3_plan)
+        with open(os.path.join(session_dir, "stage3_narrative.json"), "w", encoding="utf-8") as f: f.write(debug_s3_plan)
+        
+        try:
+            narrative_data = json.loads(self._clean_json(debug_s3_plan))
+            planned_assets = narrative_data.get("assets", [])
+            report_state["narrative"] = narrative_data.get("storyline", "Narrative generated.")
+        except json.JSONDecodeError as e:
+            print(f"[SceneGen] JSON Error in Stage 3: {e}")
+            planned_assets = []
+            report_state["narrative"] = "Failed to parse narrative."
+            update_report("Stage 3 Warning", 17, "Failed to parse narrative JSON.")
+
+        # --- STAGE 4: Color Palette ---
         print("[SceneGen] Stage 3: Color Palette...")
         prompt_s3 = f"""
         Based on the style: "{style_instruction}"
@@ -1252,43 +1354,22 @@ class SceneGenNode:
             except Exception as e:
                 print(f"Stage 3.5 Error: {e}")
 
-        # --- STAGE 4: Asset Definition & Generation ---
-        update_report("Stage 4: Generating Assets...", 20, "Designing assets based on style...")
-        print("[SceneGen] Stage 4: Asset Definition & Generation (Dependency-Aware)...")
-        prompt_s4 = f"""
-        Based on the style: "{style_instruction}"
-        And existing Reference Assets: {json.dumps(ref_data)}
+        # --- STAGE 5: Asset Generation ---
+        update_report("Stage 5: Generating Assets...", 30, f"Creating {len(planned_assets)} assets...")
+        print("[SceneGen] Stage 5: Asset Generation (Dependency-Aware)...")
         
-        Define the visual assets needed.
-        GENERATE A LARGE NUMBER OF ASSETS (Props, Environments).
-        Create MULTIPLE VARIANTS of environments to ensure coverage (e.g., "Kitchen_Wide", "Kitchen_CloseUp", "Kitchen_LowAngle").
-        - Use "parent_asset" to link the variants to the main shot (e.g., "Kitchen_CloseUp" parent is "Kitchen_Wide").
+        # Use planned assets from Stage 3
+        new_assets_list = planned_assets
         
-        Return a JSON object with a list "new_assets":
-        - "name": Unique ID (e.g. "Hero_Normal").
-        - "category": "Environment", "Prop", or "Actor".
-        - "description": Visual description.
-        - "parent_asset": Name of the asset this is based on (from References or other New Assets). Null if none.
+        # Sort assets:
+        # 1. By Category Priority (Prop -> Actor -> Location)
+        # 2. By Dependency (Parent before Child)
+        priority = {"prop": 0, "actor": 1, "location": 2, "environment": 2}
         
-        IMPORTANT GUIDELINES:
-        - Actors: Describe as a "Character Sheet" (full body, neutral background, consistent features, multiple views).
-        - Props: Describe as an "Object Sheet" (neutral background, isolated, multiple angles).
-        - Environments: Describe as "Wide Shot" (empty, no people, atmospheric, interior or exterior).
-        """
-        track_text(prompt_s4, "")
-        resp_s4 = await model_text.generate_content_async(prompt_s4)
-        debug_s4 = resp_s4.text
-        track_text("", debug_s4)
-        with open(os.path.join(session_dir, "stage4_assets.json"), "w", encoding="utf-8") as f: f.write(debug_s4)
-        
-        try:
-            new_assets_list = json.loads(self._clean_json(debug_s4)).get("new_assets", [])
-        except json.JSONDecodeError as e:
-            print(f"[SceneGen] JSON Error in Stage 4: {e}")
-            print(f"[SceneGen] Raw output: {debug_s4[:200]}...")
-            # Fallback: Try to repair or just proceed with empty assets
-            new_assets_list = []
-            update_report("Stage 4 Warning", 40, "Failed to parse asset list. Proceeding without new assets.")
+        new_assets_list.sort(key=lambda x: (
+            priority.get(x["category"].lower(), 3), 
+            1 if x.get("parent_asset") else 0
+        ))
         
         # Helper to generate assets
         async def gen_asset_task(asset_data):
@@ -1298,16 +1379,36 @@ class SceneGenNode:
             parent_name = asset_data.get("parent_asset")
             
             suffix = ""
-            if "actor" in cat: suffix = "character sheet, full body, front view and side view, neutral background, isolated, high detail, concept art"
-            elif "prop" in cat: suffix = "object sheet, isolated on white background, highly detailed, 3d render"
-            elif "env" in cat: suffix = "wide shot, empty scene, no people, architectural photography, detailed environment"
+            if "actor" in cat: 
+                suffix = "character sheet, face close-up, side profile, full body shot, neutral background, isolated, high detail, concept art"
+            elif "prop" in cat: 
+                suffix = "object sheet, isolated on white background, highly detailed, 3d render"
+            elif "env" in cat or "location" in cat: 
+                suffix = "wide shot, empty scene, no people, architectural photography, detailed environment"
 
             full_prompt = f"{style_instruction}. {desc}. {suffix}. {palette_data.get('lighting_mood', '')} --aspect {aspect_ratio}"
             
             input_parts = [full_prompt]
+            
+            # 1. Add Parent Asset (Direct Dependency)
             if parent_name and parent_name in asset_library:
                 input_parts.append(asset_library[parent_name])
                 print(f"  -> Generating {name} using parent {parent_name}")
+            
+            # 2. Add Contextual Assets (Props mentioned in description)
+            # Scan description for names of existing assets (e.g. "holding Prop_Sword")
+            # Only for Actors and Locations
+            if "actor" in cat or "location" in cat or "env" in cat:
+                for existing_name, existing_img in asset_library.items():
+                    # Avoid self-reference and parent (already added)
+                    if existing_name != name and existing_name != parent_name:
+                        # Check if existing asset name is in description
+                        # Use simple string matching. Ideally, we'd use regex or exact word match.
+                        if existing_name in desc:
+                            input_parts.append(existing_img)
+                            print(f"  -> Generating {name} with context {existing_name}")
+                            # Limit to 2 extra context images to avoid confusion
+                            if len(input_parts) >= 4: break
             
             if render_mode == "Prompt Mode":
                 # Skip actual image generation
