@@ -18,6 +18,7 @@ import shutil
 import random
 import time
 import webbrowser
+import re
 import base64
 import folder_paths
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -435,6 +436,7 @@ class SceneGenNode:
             <button class="help-btn" onclick="showHelp('final_video')">?</button>
             <h3>
                 Final Video Output
+                <a id="btn-dl-video" href="#" class="btn-action disabled" download style="margin-left: auto;">Download Video</a>
             </h3>
             <div class="final-video-container" id="final-video-box">
                 <div class="loading-placeholder">
@@ -535,7 +537,7 @@ class SceneGenNode:
                 <button class="help-btn" onclick="showHelp('prompts')">?</button>
                 <h3>
                     <button class="copy-btn" onclick="copyData('prompts')" title="Copy Prompts">📋</button>
-                    Scene Prompts (S6)
+                    Scene Prompts (S7)
                 </h3>
                 <div id="prompts-display" class="data-display">
                     <div class="loading-placeholder">
@@ -812,8 +814,9 @@ class SceneGenNode:
             let rep_html = '';
             for (const [model, secs] of Object.entries(stats.replicate_seconds || {{}})) {{
                 let rate = P_REP_DEF;
-                if (model.includes('hailuo') || model.includes('omni')) rate = 0.05;
-                if (model.includes('wan') || model.includes('kling') || model.includes('veo')) rate = 0.10;
+                if (model === 'Slideshow') rate = 0;
+                else if (model.includes('hailuo') || model.includes('omni')) rate = 0.05;
+                else if (model.includes('wan') || model.includes('kling') || model.includes('veo')) rate = 0.10;
                 let cost = secs * rate;
                 c_rep += cost;
                 rep_html += `<tr><td>${{model}}</td><td>${{secs.toFixed(1)}}s</td><td>$${{cost.toFixed(4)}}</td></tr>`;
@@ -1088,6 +1091,14 @@ class SceneGenNode:
                 if (vidBox.querySelector('.loading-placeholder')) {{
                     vidBox.innerHTML = `<video src="${{sessionPath + data.final_video}}" controls autoplay loop></video>`;
                 }}
+                
+                // Update download button
+                const btnVideo = document.getElementById('btn-dl-video');
+                if (btnVideo) {{
+                    btnVideo.href = sessionPath + data.final_video;
+                    btnVideo.classList.remove('disabled');
+                    btnVideo.download = data.final_video; // Suggest filename
+                }}
             }}
 
             // EDL Button
@@ -1268,7 +1279,7 @@ class SceneGenNode:
         }}
         """
         track_text(prompt_s3_plan, "")
-        resp_s3_plan = await model_text.generate_content_async(prompt_s3_plan)
+        resp_s3_plan = await model_text.generate_content_async([prompt_s3_plan, {"mime_type": "audio/wav", "data": audio_bytes}])
         debug_s3_plan = resp_s3_plan.text
         track_text("", debug_s3_plan)
         with open(os.path.join(session_dir, "stage3_narrative.json"), "w", encoding="utf-8") as f: f.write(debug_s3_plan)
@@ -1467,9 +1478,9 @@ class SceneGenNode:
             
         available_assets_summary = ref_data + new_assets_list
 
-        # --- STAGE 5: Montage Line ---
-        update_report("Stage 5: Creating Montage...", 35, "Structuring video timeline...")
-        print("[SceneGen] Stage 5: Montage Line...")
+        # --- STAGE 6: Montage Line ---
+        update_report("Stage 6: Creating Montage...", 35, "Structuring video timeline...")
+        print("[SceneGen] Stage 6: Montage Line...")
         
         # Build model instruction based on availability
         if available_models:
@@ -1490,57 +1501,55 @@ class SceneGenNode:
         - Specify "duration": float (how long this image should be shown, e.g. 3.0-5.0s)
             """
         
-        prompt_s5 = f"""
+        prompt_s6 = f"""
         Create a video montage JSON.
         Context:
         - Audio Duration: {total_duration_sec}s
         - Analysis: {debug_s1}
         - Style: {style_instruction}
+        - Narrative: {report_state.get("narrative", "")}
         - Assets Available: {json.dumps(available_assets_summary)}
         - Dynamicity: {dynamicity} (0-1)
-        - Aggressive Edit: {aggressive_edit} (Boolean)
-        {model_instruction}
+        - Aggressive Edit: {aggressive_edit}
         
-        Task:
-        Create a list of scenes that strictly sums to {total_duration_sec}s.
+        INSTRUCTION:
+        Create a sequence of scenes that perfectly syncs with the audio.
+        Use the provided Audio File to feel the rhythm and cuts.
         
         If Aggressive Edit is True:
-        - Create a fast-paced montage with frequent cuts (short target durations).
-        - You MUST still respect the model generation minimums (e.g. 5s), but we will trim them later.
-        - Specify the "trim_duration" in the JSON to indicate the actual length used in the edit (e.g. 2.0s).
-        - Ensure cuts are strictly synchronized to the beat/dramaturgy.
+        - Create fast cuts, sync tightly to beats.
+        - Use "trim_duration" to specify the exact part of the generated video to use (e.g. generate 5s, use 2s).
+        - High energy!
+        
+        {model_instruction}
         
         Return JSON object with "scenes": list of objects:
-        - "duration": float (as specified above)
-        - "trim_duration": float (Actual edit duration, e.g. 2.5. If not aggressive, same as duration)
-        - "model": string (as specified above)
-        - "clue": simple description of the shot content.
-        - "asset_refs": list of strings (names of assets from Assets Available to use). IMPORTANT: Use the EXACT "name" string from the Assets Available list (e.g., "Gen_Env_0", "Gen_Actor_1"). Do not invent new names.
+        - "description": Visual description of the scene action.
+        - "assets": List of asset names used (from Assets Available).
+        - "duration": float (Generation duration).
+        - "trim_duration": float (Actual duration in timeline, <= duration).
+        - "model": string (Model to use).
         """
-        track_text(prompt_s5, "")
-        resp_s5 = await model_text.generate_content_async(prompt_s5)
-        debug_s5 = resp_s5.text
-        track_text("", debug_s5)
-        with open(os.path.join(session_dir, "stage5_montage.json"), "w", encoding="utf-8") as f: f.write(debug_s5)
+        track_text(prompt_s6, "")
+        resp_s6 = await model_text.generate_content_async([prompt_s6, {"mime_type": "audio/wav", "data": audio_bytes}])
+        debug_s6 = resp_s6.text
+        track_text("", debug_s6)
+        with open(os.path.join(session_dir, "stage6_montage.json"), "w", encoding="utf-8") as f: f.write(debug_s6)
         
         try:
-            montage_data = json.loads(self._clean_json(debug_s5)).get("scenes", [])
+            montage_data = json.loads(self._clean_json(debug_s6)).get("scenes", [])
         except json.JSONDecodeError as e:
-            print(f"[SceneGen] JSON Error in Stage 5: {e}")
-            print(f"[SceneGen] Raw output: {debug_s5[:200]}...")
-            # Fallback: create a single default scene
-            montage_data = [{
-                "duration": total_duration_sec,
-                "trim_duration": total_duration_sec,
-                "model": available_models[0] if available_models else "Slideshow",
-                "clue": "Default scene due to parsing error",
-                "asset_refs": []
-            }]
-            update_report("Stage 5 Warning", 37, "Failed to parse montage JSON. Using single default scene.")
+            print(f"[SceneGen] JSON Error in Stage 6: {e}")
+            # Fallback: simple slideshow
+            montage_data = [{"description": "Scene 1", "assets": [], "duration": 5.0, "trim_duration": 5.0, "model": "Slideshow"}]
+            update_report("Stage 6 Warning", 40, "Failed to parse montage. Using fallback.")
+            
+        report_state["montage"] = montage_data
+        update_report(None, None, f"Montage created: {len(montage_data)} scenes.")
 
-        # --- STAGE 6: Prompt Engineering (Batched) ---
-        update_report("Stage 6: Writing Prompts...", 45, "Expanding scene details...")
-        print("[SceneGen] Stage 6: Prompt Engineering (Batched)...")
+        # --- STAGE 7: Prompt Engineering (Batched) ---
+        update_report("Stage 7: Writing Prompts...", 45, "Expanding scene details...")
+        print("[SceneGen] Stage 7: Prompt Engineering (Batched)...")
         detailed_scenes = []
         batch_size = 10
         
@@ -1554,7 +1563,7 @@ class SceneGenNode:
             
             print(f"  -> Processing Batch {b_idx + 1}/{total_batches} (Scenes {start_i} to {min(end_i, len(montage_data))})...")
             
-            prompt_s6 = f"""
+            prompt_s7 = f"""
             Expand the montage into detailed production prompts.
             Batch {b_idx + 1} of {total_batches}.
             
@@ -1580,10 +1589,10 @@ class SceneGenNode:
             """
             
             try:
-                track_text(prompt_s6, "")
-                resp_s6 = await model_text.generate_content_async(prompt_s6)
-                track_text("", resp_s6.text)
-                batch_result = json.loads(self._clean_json(resp_s6.text)).get("scenes", [])
+                track_text(prompt_s7, "")
+                resp_s7 = await model_text.generate_content_async(prompt_s7)
+                track_text("", resp_s7.text)
+                batch_result = json.loads(self._clean_json(resp_s7.text)).get("scenes", [])
                 
                 # Merge details back into the original scene data for this batch
                 for i, scene_detail in enumerate(batch_result):
@@ -1596,17 +1605,17 @@ class SceneGenNode:
                 detailed_scenes.extend(batch_scenes)
         
         final_scenes = detailed_scenes
-        debug_s6 = json.dumps(final_scenes, indent=2)
-        with open(os.path.join(session_dir, "stage6_prompts.json"), "w", encoding="utf-8") as f: f.write(debug_s6)
+        debug_s7 = json.dumps(final_scenes, indent=2)
+        with open(os.path.join(session_dir, "stage7_prompts.json"), "w", encoding="utf-8") as f: f.write(debug_s7)
         
         # Update report state with prompts and montage
-        report_state["prompts"] = debug_s6
+        report_state["prompts"] = debug_s7
         report_state["montage"] = final_scenes
-        update_report("Stage 7: Generating Start Frames...", 50, "Scene prompts complete.")
+        update_report("Stage 8: Generating Start Frames...", 50, "Scene prompts complete.")
 
-        # --- STAGE 7: Image Generation (Start Frames) ---
-        update_report("Stage 7: Generating Start Frames...", 55, f"Generating {len(final_scenes)} start frames...")
-        print(f"[SceneGen] Stage 7: Generating Start Frames ({len(final_scenes)} scenes)...")
+        # --- STAGE 8: Image Generation (Start Frames) ---
+        update_report("Stage 8: Generating Start Frames...", 55, f"Generating {len(final_scenes)} start frames...")
+        print(f"[SceneGen] Stage 8: Generating Start Frames ({len(final_scenes)} scenes)...")
         
         async def gen_scene_image(idx, scene_data):
             prompt = f"{scene_data.get('positive_prompt')} --aspect {aspect_ratio}"
@@ -1635,8 +1644,8 @@ class SceneGenNode:
                                 break
         scene_images = []
         if render_mode == "Full Render":
-            update_report("Stage 7: Generating Start Frames...", 55, f"Generating {len(final_scenes)} start frames...")
-            print(f"[SceneGen] Stage 7: Generating Start Frames ({len(final_scenes)} scenes)...")
+            update_report("Stage 8: Generating Start Frames...", 55, f"Generating {len(final_scenes)} start frames...")
+            print(f"[SceneGen] Stage 8: Generating Start Frames ({len(final_scenes)} scenes)...")
             
             async def gen_scene_image(idx, scene_data):
                 prompt = f"{scene_data.get('positive_prompt')} --aspect {aspect_ratio}"
@@ -1704,25 +1713,25 @@ class SceneGenNode:
             scene_images = await asyncio.gather(*[gen_scene_image(i, s) for i, s in enumerate(final_scenes)])
             update_report(None, 65, "Start frames generated.")
         else:
-            update_report("Stage 7: Skipped (Prompt Mode - Text Only)", 65, "Skipping start frame generation.")
-            print("[SceneGen] Stage 7: Skipped (Prompt Mode - Text Only)")
+            update_report("Stage 8: Skipped (Prompt Mode - Text Only)", 65, "Skipping start frame generation.")
+            print("[SceneGen] Stage 8: Skipped (Prompt Mode - Text Only)")
             # Provide placeholder images for subsequent stages that might expect them
             scene_images = [Image.new('RGB', (img_w, img_h))] * len(final_scenes)
 
-        debug_s7 = f"Generated {len(scene_images)} start frames."
-        with open(os.path.join(session_dir, "stage7_generation_status.txt"), "w", encoding="utf-8") as f: f.write(debug_s7)
+        debug_s8 = f"Generated {len(scene_images)} start frames."
+        with open(os.path.join(session_dir, "stage8_generation_status.txt"), "w", encoding="utf-8") as f: f.write(debug_s8)
 
-        # --- STAGE 8: Vision-Aware Video Prompt Refinement ---
-        update_report("Stage 8: Refining Motion...", 70, "Analyzing frames for motion prompts...")
-        print(f"[SceneGen] Stage 8: Refining Video Prompts with Vision ({len(final_scenes)} scenes)...")
+        # --- STAGE 9: Vision-Aware Video Prompt Refinement ---
+        update_report("Stage 9: Refining Motion...", 70, "Analyzing frames for motion prompts...")
+        print(f"[SceneGen] Stage 9: Refining Video Prompts with Vision ({len(final_scenes)} scenes)...")
         
-        current_time_s8 = 0.0
+        current_time_s9 = 0.0
         refine_tasks = []
         
         async def refine_scene_prompt(idx, scene, img, start_time):
             model_name = scene.get("model", "generic")
             
-            prompt_s8 = f"""
+            prompt_s9 = f"""
             Role: Expert Video Prompt Engineer for {model_name}.
             
             Input:
@@ -1745,21 +1754,21 @@ class SceneGenNode:
             
             try:
                 # Gemini supports image input directly
-                track_text(prompt_s8, "")
-                resp = await model_text.generate_content_async([prompt_s8, img])
+                track_text(prompt_s9, "")
+                resp = await model_text.generate_content_async([prompt_s9, img])
                 track_text("", resp.text)
                 res_json = json.loads(self._clean_json(resp.text))
                 return (idx, res_json.get("video_trigger_prompt", ""))
             except Exception as e:
-                print(f"Stage 8 Error (Scene {idx}): {e}")
+                print(f"Stage 9 Error (Scene {idx}): {e}")
                 return (idx, "")
 
         for i, scene in enumerate(final_scenes):
             dur = float(scene.get("duration", 5))
             # Ensure we have an image
             img = scene_images[i]
-            refine_tasks.append(refine_scene_prompt(i, scene, img, current_time_s8))
-            current_time_s8 += dur
+            refine_tasks.append(refine_scene_prompt(i, scene, img, current_time_s9))
+            current_time_s9 += dur
             
         # Run with concurrency limit (chunking)
         refined_results = []
@@ -1774,15 +1783,15 @@ class SceneGenNode:
             if new_prompt:
                 final_scenes[idx]["video_trigger_prompt"] = new_prompt
                 
-        debug_s8 = json.dumps([{"scene": i, "motion": p} for i, p in refined_results], indent=2) if refined_results else "[]"
-        with open(os.path.join(session_dir, "stage8_prompts_status.txt"), "w", encoding="utf-8") as f: f.write(debug_s8)
-        report_state["motion"] = debug_s8
+        debug_s9 = json.dumps([{"scene": i, "motion": p} for i, p in refined_results], indent=2) if refined_results else "[]"
+        with open(os.path.join(session_dir, "stage9_prompts_status.txt"), "w", encoding="utf-8") as f: f.write(debug_s9)
+        report_state["motion"] = debug_s9
         # Update montage with new prompts
         report_state["montage"] = final_scenes
-        update_report("Stage 9: Audio Slicing...", 75, "Motion refinement complete.")
+        update_report("Stage 11: Audio Slicing...", 75, "Motion refinement complete.")
 
-        # --- STAGE 9: Duration Verification & Audio Slicing ---
-        print("[SceneGen] Stage 9: Duration Verification...")
+        # --- STAGE 10: Duration Verification & Audio Slicing ---
+        print("[SceneGen] Stage 10: Duration Verification...")
         current_sample = 0
         replicate_tasks = []
         
@@ -1836,7 +1845,7 @@ class SceneGenNode:
             
             current_sample += int(trim_dur * sample_rate)
             
-        # Save Stage 9 details
+        # Save Stage 10 details
         tasks_summary = []
         for t in replicate_tasks:
             tasks_summary.append({
@@ -1855,12 +1864,12 @@ class SceneGenNode:
             if m not in usage_stats["replicate_seconds"]: usage_stats["replicate_seconds"][m] = 0
             usage_stats["replicate_seconds"][m] += t["duration"]
         
-        debug_s9 = json.dumps(tasks_summary, indent=2)
-        with open(os.path.join(session_dir, "stage9_tasks.json"), "w", encoding="utf-8") as f: f.write(debug_s9)
+        debug_s10 = json.dumps(tasks_summary, indent=2)
+        with open(os.path.join(session_dir, "stage10_tasks.json"), "w", encoding="utf-8") as f: f.write(debug_s10)
 
-        # --- STAGE 10: Replicate Execution ---
-        update_report("Stage 10: Rendering Video...", 75, f"Starting render of {len(replicate_tasks)} clips...")
-        print(f"[SceneGen] Stage 10: Replicate Execution ({len(replicate_tasks)} tasks)...")
+        # --- STAGE 11: Replicate Execution ---
+        update_report("Stage 11: Rendering Video...", 75, f"Starting render of {len(replicate_tasks)} clips...")
+        print(f"[SceneGen] Stage 11: Replicate Execution ({len(replicate_tasks)} tasks)...")
         
         video_paths = [None] * len(replicate_tasks)
         
@@ -1958,9 +1967,9 @@ class SceneGenNode:
 
         with open(os.path.join(session_dir, "stage10_paths.json"), "w", encoding="utf-8") as f: json.dump(video_paths, f, indent=2)
 
-        # --- STAGE 11: Stitching ---
-        update_report("Stage 11: Stitching...", 95, "Combining clips into final video...")
-        print("[SceneGen] Stage 11: Stitching...")
+        # --- STAGE 12: Stitching ---
+        update_report("Stage 12: Stitching...", 95, "Combining clips into final video...")
+        print("[SceneGen] Stage 12: Stitching...")
         final_video_path = os.path.join(session_dir, f"{prefix}_final.mp4")
         
         if render_mode == "Full Render":
@@ -2186,9 +2195,27 @@ class SceneGenNode:
 
     def _clean_json(self, text):
         text = text.strip()
-        if text.startswith("```json"): text = text[7:]
-        if text.startswith("```"): text = text[3:]
-        if text.endswith("```"): text = text[:-3]
+        # Remove markdown code blocks if present
+        if "```" in text:
+            text = re.sub(r'```json\s*', '', text)
+            text = re.sub(r'```\s*', '', text)
+        
+        # Try to find JSON object or array
+        start_obj = text.find('{')
+        start_arr = text.find('[')
+        
+        if start_obj == -1 and start_arr == -1:
+            return text # Return as is, probably fail
+            
+        if start_obj != -1 and (start_arr == -1 or start_obj < start_arr):
+            # Object
+            end = text.rfind('}')
+            if end != -1: text = text[start_obj:end+1]
+        else:
+            # Array
+            end = text.rfind(']')
+            if end != -1: text = text[start_arr:end+1]
+            
         return text.strip()
 
 class SceneGenExtractor:
