@@ -1916,12 +1916,17 @@ class SceneGenNode:
                         frame = next((f for f in start_frames if f["name"] == f"Scene {idx}"), None)
                         if frame:
                             img_path = os.path.join(session_dir, frame["file"])
-                            dur = float(scene.get("duration", 5))
+                            
+                            # Calculate duration exactly as in Stage 9 to ensure sync
+                            target_dur = float(scene.get("duration", 5))
+                            trim_dur = float(scene.get("trim_duration", target_dur))
+                            if not aggressive_edit: trim_dur = target_dur
+                            
                             norm = os.path.join(session_dir, f"slide_{idx:03d}.mp4")
                             
                             # Create video clip from image with specific duration
                             cmd = [
-                                "ffmpeg", "-y", "-loop", "1", "-i", img_path, "-t", str(dur),
+                                "ffmpeg", "-y", "-loop", "1", "-i", img_path, "-t", str(trim_dur),
                                 "-vf", f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease,pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2",
                                 "-r", "24", "-c:v", "libx264", "-crf", "23", "-preset", "fast", "-pix_fmt", "yuv420p", "-an", norm
                             ]
