@@ -1660,7 +1660,7 @@ class SceneGenNode:
             trim_dur = float(scene.get("trim_duration", target_dur))
             if not aggressive_edit: trim_dur = target_dur # Safety fallback
             
-            model = scene.get("model", available_models[0])
+            model = scene.get("model", available_models[0] if available_models else "Slideshow")
             
             # Snap logic
             gen_dur = target_dur
