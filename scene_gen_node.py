@@ -719,6 +719,11 @@ class SceneGenNode:
             document.body.appendChild(script);
         }}
 
+        function safeParse(input) {{
+            if (typeof input === 'object') return input;
+            try {{ return JSON.parse(input); }} catch(e) {{ return input; }}
+        }}
+
         function renderUI(data) {{
             // 1. Status Bar
             const statusEl = document.getElementById('status');
@@ -756,109 +761,94 @@ class SceneGenNode:
                 if (statusText.includes(key)) {{
                     const el = document.getElementById(id);
                     if (el) el.classList.add('active-stage');
-                    break;
                 }}
             }}
 
-            // 3. Render Data Sections
+            // 3. Render Data
             renderInteractiveJson(data.analysis, 'analysis-display');
             renderInteractiveJson(data.style, 'style-display');
             renderInteractiveJson(data.narrative, 'narrative-display');
-            renderInteractiveJson(data.prompts, 'prompts-display');
-            renderInteractiveJson(data.motion, 'motion-display');
+            renderInteractiveJson(safeParse(data.prompts), 'prompts-display');
+            renderInteractiveJson(safeParse(data.motion), 'motion-display');
+            renderInteractiveJson(data.palette, 'palette-display');
             
-            // 4. Palette
-            if (data.palette) {{
-                const pContainer = document.getElementById('palette-display');
-                if(pContainer) {{
-                    let pHtml = '';
-                    if (data.palette.colors) {{
-                        data.palette.colors.forEach(c => {{
-                            pHtml += `<div class="palette-item" onclick="copyText('${{c.hex}}')">
-                                <div class="palette-swatch" style="background-color: ${{c.hex}}"></div>
-                                <div class="palette-hex">${{c.hex}}</div>
-                                <div class="palette-info">${{c.description || ''}}</div>
-                            </div>`;
-                        }});
-                    }}
-                    pContainer.innerHTML = pHtml || '<div style="padding:10px; color:#666;">No palette data</div>';
-                }}
-            }}
-
-            // 5. Timeline
-            renderTimeline(data);
-
-            // 6. Galleries
+            // 4. Render Galleries
             renderGallery(data.assets, 'assets-gallery', 'asset');
             renderGallery(data.videos, 'videos-gallery', 'video');
             
-            // 7. Final Video
-            if (data.final_video) {{
-                const vContainer = document.getElementById('final-video-box');
-                if (vContainer && !vContainer.querySelector('video')) {{
-                    vContainer.innerHTML = `<video controls src="${{data.final_video}}" poster="${{data.final_poster || ''}}" style="width:100%"></video>`;
-                    const btn = document.getElementById('btn-dl-video');
-                    if(btn) {{
-                        btn.href = data.final_video;
-                        btn.classList.remove('disabled');
+            // 5. Render Timeline
+            const tContainer = document.getElementById('timeline-container');
+            if (tContainer) {{
+                const scenes = data.montage || safeParse(data.prompts) || [];
+                if (scenes && scenes.length > 0) {{
+                    let html = '';
+                    const zoomEl = document.getElementById('timeline-zoom');
+                    const zoom = zoomEl ? zoomEl.value : 50;
+                    
+                    scenes.forEach((scene, idx) => {{
+                        const duration = scene.duration || 5;
+                        const width = duration * (zoom / 5); 
+                        
+                        const img = scene.image_file || scene.image || '';
+                        const label = `Scene ${{idx + 1}}`;
+                        const time = `${{duration}}s`;
+                        const desc = scene.description || scene.visual || "No description";
+
+                        html += `<div class="timeline-segment" style="width: ${{width}}px; flex-shrink: 0;" onclick="openLightbox('timeline', ${{idx}})">
+                            ${{img ? `<img src="${{img}}" loading="lazy">` : '<div style="width:100%;height:100%;background:#333;"></div>'}}
+                            <div class="seg-label">${{label}}</div>
+                            <div class="seg-time">${{time}}</div>
+                            <div class="seg-info">${{desc}}</div>
+                        </div>`;
+                    }});
+                    tContainer.innerHTML = html;
+                }}
+            }}
+            
+            // 6. Render Logs
+            const logBox = document.getElementById('logs');
+            if (logBox && data.logs) {{
+                logBox.innerHTML = data.logs.map(l => `<div>${{l}}</div>`).join('');
+                logBox.scrollTop = logBox.scrollHeight;
+            }}
+            
+            // 7. Render Costs
+            const costBox = document.getElementById('costs');
+            if (costBox && data.costs) {{
+                const c = data.costs;
+                // Calculate costs (Client-side estimation)
+                const PRICE_GEMINI_INPUT = 3.50 / 1000000;
+                const PRICE_GEMINI_OUTPUT = 10.50 / 1000000;
+                const PRICE_GEMINI_IMAGE = 0.04;
+                
+                const c_gem_in = (c.gemini_text_input_tokens || 0) * PRICE_GEMINI_INPUT;
+                const c_gem_out = (c.gemini_text_output_tokens || 0) * PRICE_GEMINI_OUTPUT;
+                const c_gem_img = (c.gemini_images_generated || 0) * PRICE_GEMINI_IMAGE;
+                
+                let c_rep = 0;
+                let rep_html = '';
+                if (c.replicate_seconds) {{
+                    for (const [model, sec] of Object.entries(c.replicate_seconds)) {{
+                        let price_per_sec = 0.10; // Default
+                        if (model.includes('hailuo') || model.includes('omni')) price_per_sec = 0.05;
+                        const cost = sec * price_per_sec;
+                        c_rep += cost;
+                        rep_html += `<div>${{model}}: ${{sec.toFixed(1)}}s ($${{cost.toFixed(4)}})</div>`;
                     }}
                 }}
-            }}
-
-            // 8. Logs
-            if (data.logs) {{
-                const logBox = document.getElementById('logs');
-                if(logBox) {{
-                    logBox.innerHTML = data.logs.map(l => `<div class="log-entry">${{l}}</div>`).join('');
-                    requestAnimationFrame(() => {{
-                        logBox.scrollTop = logBox.scrollHeight;
-                    }});
-                }}
-            }}
-            
-            // 9. Costs
-            if (data.cost) {{
-                const costsEl = document.getElementById('costs');
-                if(costsEl) {{
-                    costsEl.innerHTML = `
-                        <table class="cost-table">
-                            <tr><th>Model</th><th>Count</th><th>Cost</th></tr>
-                            ${{Object.entries(data.cost.breakdown || {{}}).map(([k, v]) => `<tr><td>${{k}}</td><td>${{v.count}}</td><td>$${{v.cost.toFixed(4)}}</td></tr>`).join('')}}
-                        </table>
-                        <div class="total-cost">Total: $${{data.cost.total.toFixed(4)}}</div>
-                    `;
-                }}
-            }}
-        }}
-
-        function renderTimeline(data) {{
-            const tContainer = document.getElementById('timeline');
-            if(!tContainer) return;
-            
-            const scenes = data.montage || data.prompts || [];
-            if (!scenes || scenes.length === 0) return;
-
-            let html = '';
-            const zoomEl = document.getElementById('timeline-zoom');
-            const zoom = zoomEl ? zoomEl.value : 50;
-            
-            scenes.forEach((scene, idx) => {{
-                const duration = scene.duration || 5;
-                const width = duration * (zoom / 5); 
                 
-                const img = scene.image_file || scene.image || '';
-                const label = `Scene ${{idx + 1}}`;
-                const time = `${{duration}}s`;
-                const desc = scene.description || scene.visual || "No description";
-
-                html += `<div class="timeline-segment" style="width: ${{width}}px; flex-shrink: 0;" onclick="openLightbox('timeline', ${{idx}})">
-                    ${{img ? `<img src="${{img}}" loading="lazy">` : '<div style="width:100%;height:100%;background:#333;"></div>'}}
-                    <div class="seg-label">${{label}}</div>
-                    <div class="seg-time">${{time}}</div>
-                    <div class="seg-info">${{desc}}</div>
-                </div>`;
-            }});
-            tContainer.innerHTML = html;
+                const total = c_gem_in + c_gem_out + c_gem_img + c_rep;
+                
+                costBox.innerHTML = `
+                    <div style="font-size: 1.2em; font-weight: bold; color: #4CAF50; margin-bottom: 10px;">Total: $${{total.toFixed(4)}}</div>
+                    <div style="font-size: 0.9em; color: #aaa;">
+                        <div>Gemini Input: $${{c_gem_in.toFixed(4)}}</div>
+                        <div>Gemini Output: $${{c_gem_out.toFixed(4)}}</div>
+                        <div>Gemini Images: $${{c_gem_img.toFixed(4)}}</div>
+                        ${{rep_html}}
+                    </div>
+                `;
+            }}
         }}
 
         function renderGallery(items, containerId, type) {{
@@ -1295,6 +1285,8 @@ class SceneGenNode:
             desc = asset_data["description"]
             parent_name = asset_data.get("parent_asset")
             
+            update_report(None, None, f"Generating Asset: {name} ({cat})...")
+            
             suffix = ""
             if "actor" in cat: 
                 suffix = "character sheet, face close-up, side profile, full body shot, neutral background, isolated, high detail, concept art"
@@ -1377,6 +1369,8 @@ class SceneGenNode:
                                     usage_stats["generated_assets"].append({"name": name, "type": cat, "file": fname})
                                     report_state["assets"].append({"name": name, "type": cat, "file": fname, "prompt": full_prompt}) # Add to report state
                                 usage_stats["gemini_images_generated"] += 1 # Track image generation
+                                
+                                update_report(None, None, f"Asset Ready: {name}")
                                 return (name, img, cat)
                 except asyncio.TimeoutError:
                     print(f"[SceneGen] WARNING: Asset {name} timed out (Attempt {attempt+1}/{max_retries}). Retrying...")
@@ -1890,6 +1884,7 @@ class SceneGenNode:
                         
                         dur = time.time() - t_start
                         print(f"[SceneGen] Scene {idx} Success in {dur:.1f}s")
+                        update_report(None, None, f"Start Frame {idx} generated in {dur:.1f}s")
                         if hasattr(r, 'parts'):
                             for p in r.parts:
                                 if hasattr(p, 'inline_data'):
@@ -2160,13 +2155,13 @@ class SceneGenNode:
         # --- STAGE 11: Replicate Execution ---
         update_report("Stage 11: Rendering Video...", 75, f"Starting render of {len(replicate_tasks)} clips...")
         print(f"[SceneGen] Stage 11: Replicate Execution ({len(replicate_tasks)} tasks)...")
-        
         video_paths = [None] * len(replicate_tasks)
         
         if render_mode == "Full Render" and available_models:
             def run_replicate(task):
                 idx = task["index"]
                 print(f"Task {idx} ({task['model']}) starting...")
+                update_report(None, None, f"Video Task {idx} starting ({task['model']})...")
                 
                 # Temp files
                 with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tf_img:
@@ -2226,6 +2221,7 @@ class SceneGenNode:
                             for chunk in r.iter_content(chunk_size=8192): f.write(chunk)
                     
                     # Track for report
+                    update_report(None, None, f"Video Task {idx} Complete.")
                     return (idx, local_path, fname, current_prompt)
                     
                 except Exception as e:
