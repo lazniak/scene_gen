@@ -2861,6 +2861,16 @@ Return JSON ONLY:
                 rec_in_sec = 0.0
                 valid_videos_for_edl = [(i, v) for i, v in enumerate(video_paths) if v is not None] if render_mode == "Full Render" else [(i, f"slide_{i:03d}.mp4") for i, _ in enumerate(replicate_tasks)]
                 
+                def sec_to_tc(s):
+                    frames = int(s * fps)
+                    hh = frames // 86400
+                    rem = frames % 86400
+                    mm = rem // 3600
+                    rem = rem % 3600
+                    ss = rem // 24
+                    ff = rem % 24
+                    return f"{hh:02d}:{mm:02d}:{ss:02d}:{ff:02d}"
+
                 for i, v_name in valid_videos_for_edl:
                     trim = replicate_tasks[i]["trim_duration"]
                     
@@ -2871,25 +2881,43 @@ Return JSON ONLY:
                     # Record TC
                     rec_out_sec = rec_in_sec + trim
                     
-                    def sec_to_tc(s):
-                        frames = int(s * fps)
-                        hh = frames // 86400
-                        rem = frames % 86400
-                        mm = rem // 3600
-                        rem = rem % 3600
-                        ss = rem // 24
-                        ff = rem % 24
-                        return f"{hh:02d}:{mm:02d}:{ss:02d}:{ff:02d}"
-
                     src_out = sec_to_tc(src_out_sec)
                     rec_in = sec_to_tc(rec_in_sec)
                     rec_out = sec_to_tc(rec_out_sec)
                     
-                    line = f"{i+1:03d}  AX       V     C        {src_in} {src_out} {rec_in} {rec_out}\n"
-                    edl.write(line)
+                    # Video Track
+                    line_v = f"{i+1:03d}  AX       V     C        {src_in} {src_out} {rec_in} {rec_out}\n"
+                    edl.write(line_v)
+                    
+                    # Audio Track (From Video) - AA (Channels 1+2)
+                    line_a = f"{i+1:03d}  AX       AA    C        {src_in} {src_out} {rec_in} {rec_out}\n"
+                    edl.write(line_a)
+                    
                     edl.write(f"* FROM CLIP NAME: {os.path.basename(v_name)}\n\n")
                     
                     rec_in_sec = rec_out_sec
+                
+                # Add Main Soundtrack on Tracks 3 & 4
+                # Note: A3/A4 support depends on the NLE import.
+                music_dur = rec_in_sec # Total duration
+                if music_dur > 0:
+                    m_src_in = "00:00:00:00"
+                    m_src_out = sec_to_tc(music_dur)
+                    m_rec_in = "00:00:00:00"
+                    m_rec_out = m_src_out
+                    
+                    # Event ID continues
+                    evt_id = len(valid_videos_for_edl) + 1
+                    
+                    # Track 3
+                    edl.write(f"{evt_id:03d}  MUSIC    A3    C        {m_src_in} {m_src_out} {m_rec_in} {m_rec_out}\n")
+                    edl.write(f"* MAIN SOUNDTRACK\n")
+                    edl.write(f"* FROM CLIP NAME: original_audio.wav\n")
+                    
+                    # Track 4
+                    edl.write(f"{evt_id:03d}  MUSIC    A4    C        {m_src_in} {m_src_out} {m_rec_in} {m_rec_out}\n")
+                    edl.write(f"* MAIN SOUNDTRACK\n")
+                    edl.write(f"* FROM CLIP NAME: original_audio.wav\n\n")
             
             # Add EDL to report (basename is fine - it's in same dir as status.js)
             report_state["edl_file"] = os.path.basename(edl_path)
