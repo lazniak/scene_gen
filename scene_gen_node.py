@@ -2367,6 +2367,15 @@ class SceneGenNode:
         video_paths = [None] * len(replicate_tasks)
         
         if render_mode == "Full Render" and available_models:
+            # Read model documentation for Gemini context
+            docs_path = os.path.join(os.path.dirname(__file__), "Replicate_models_documentations.md")
+            model_docs = ""
+            try:
+                with open(docs_path, "r", encoding="utf-8") as f:
+                    model_docs = f.read()
+            except Exception as e:
+                print(f"[SceneGen] Warning: Could not load model documentation: {e}")
+            
             def run_replicate(task):
                 idx = task["index"]
                 print(f"Task {idx} ({task['model']}) starting...")
@@ -2382,72 +2391,179 @@ class SceneGenNode:
                     
                 try:
                     video_url = None
-                    max_retries = 5
+                    max_retries = 10  # Increased from 5 - never give up
                     current_prompt = task["prompt"]
                     current_model = task["model"]
+                    current_duration = task["duration"]
                     
                     for attempt in range(max_retries + 1):
                         try:
+                            # CRITICAL: Validate duration before API call
+                            # Ensure duration >= trim_duration and matches model requirements
+                            trim_dur = task["trim_duration"]
+                            
+                            if "kling" in current_model:
+                                # Kling: 5 or 10 only
+                                if current_duration < 5:
+                                    current_duration = 5
+                                elif current_duration > 5 and current_duration < 10:
+                                    current_duration = 10
+                                elif current_duration < trim_dur:
+                                    current_duration = 10 if trim_dur > 5 else 5
+                                    
+                            elif "wan-video" in current_model:
+                                # Wan: 5 or 10 only
+                                if current_duration < 5:
+                                    current_duration = 5
+                                elif current_duration > 5 and current_duration < 10:
+                                    current_duration = 10
+                                elif current_duration < trim_dur:
+                                    current_duration = 10 if trim_dur > 5 else 5
+                                    
+                            elif "hailuo" in current_model:
+                                # Hailuo: 6 or 10
+                                if current_duration < 6:
+                                    current_duration = 6
+                                elif current_duration > 6 and current_duration < 10:
+                                    current_duration = 10
+                                elif current_duration < trim_dur:
+                                    current_duration = 10 if trim_dur > 6 else 6
+                                    
+                            elif "veo" in current_model:
+                                # Veo: 4, 6, or 8
+                                if current_duration <= 4:
+                                    current_duration = 4
+                                elif current_duration <= 6:
+                                    current_duration = 6
+                                else:
+                                    current_duration = 8
+                                if current_duration < trim_dur:
+                                    if trim_dur <= 4:
+                                        current_duration = 4
+                                    elif trim_dur <= 6:
+                                        current_duration = 6
+                                    else:
+                                        current_duration = 8
+                                        
+                            # ALWAYS ensure generated duration >= trim duration
+                            if current_duration < trim_dur:
+                                print(f"WARNING: Task {idx}: duration {current_duration} < trim {trim_dur}. This should not happen!")
+                                # Force correction
+                                current_duration = trim_dur + 1
+                            
                             with open(img_path, "rb") as f_img, open(aud_path, "rb") as f_aud:
                                 input_data = {}
                                 # Map inputs based on model
                                 if "wan-video" in current_model:
                                     res = "1080p" if video_quality == "High" else "720p"
                                     if video_quality == "Low": res = "480p"
-                                    input_data = {"image": f_img, "audio": f_aud, "prompt": current_prompt, "negative_prompt": task["negative_prompt"], "duration": task["duration"], "resolution": res, "enable_prompt_expansion": enable_prompt_expansion}
+                                    input_data = {"image": f_img, "audio": f_aud, "prompt": current_prompt, "negative_prompt": task["negative_prompt"], "duration": current_duration, "resolution": res, "enable_prompt_expansion": enable_prompt_expansion}
                                 elif "kling" in current_model:
-                                    input_data = {"start_image": f_img, "prompt": current_prompt, "negative_prompt": task["negative_prompt"], "duration": task["duration"], "aspect_ratio": aspect_ratio, "guidance_scale": 0.5}
+                                    input_data = {"start_image": f_img, "prompt": current_prompt, "negative_prompt": task["negative_prompt"], "duration": current_duration, "aspect_ratio": aspect_ratio, "guidance_scale": 0.5}
                                 elif "omni-human" in current_model:
                                     input_data = {"image": f_img, "audio": f_aud, "prompt": current_prompt, "fast_mode": (video_quality != "High")}
                                 elif "hailuo" in current_model:
                                     res = "1080p" if video_quality == "High" else "768p"
-                                    if task["duration"] == 10: res = "768p" # Enforce resolution constraint
-                                    input_data = {"first_frame_image": f_img, "prompt": current_prompt, "duration": task["duration"], "resolution": res, "prompt_optimizer": True}
+                                    if current_duration == 10: res = "768p" # Enforce resolution constraint
+                                    input_data = {"first_frame_image": f_img, "prompt": current_prompt, "duration": current_duration, "resolution": res, "prompt_optimizer": True}
                                 elif "veo" in current_model:
                                     res = "1080p" if video_quality == "High" else "720p"
-                                    input_data = {"image": f_img, "prompt": current_prompt, "negative_prompt": task["negative_prompt"], "duration": task["duration"], "resolution": res, "aspect_ratio": aspect_ratio, "generate_audio": True}
+                                    input_data = {"image": f_img, "prompt": current_prompt, "negative_prompt": task["negative_prompt"], "duration": current_duration, "resolution": res, "aspect_ratio": aspect_ratio, "generate_audio": True}
 
                                 output = replicate.run(current_model, input=input_data)
                                 video_url = str(output)
+                                print(f"✓ Task {idx} SUCCESS on attempt {attempt+1}")
                                 break
                         except Exception as e:
-                            print(f"Task {idx} Attempt {attempt+1} Failed: {e}")
+                            error_msg = str(e)
+                            print(f"✗ Task {idx} Attempt {attempt+1}/{max_retries+1} Failed: {error_msg}")
+                            
                             if attempt < max_retries:
-                                # Gemini Analysis
+                                # GEMINI ANALYSIS WITH DOCUMENTATION
                                 try:
-                                    error_msg = str(e)
-                                    analysis_prompt = f"""
-                                    The video generation task failed.
-                                    Model: {current_model}
-                                    Prompt: {current_prompt}
-                                    Error: {error_msg}
+                                    analysis_prompt = f"""You are a video generation API expert. A Replicate task failed and you must fix it.
+
+CRITICAL CONTEXT - AVAILABLE MODELS AND THEIR REQUIREMENTS:
+{model_docs[:15000]}  
+
+CURRENT TASK:
+- Model: {current_model}
+- Prompt: {current_prompt}
+- Duration: {current_duration}s (must be >= {trim_dur}s trim)
+- Error: {error_msg}
+
+ANALYSIS TASK:
+1. **Check if error is about invalid duration**: Parse the error for duration constraints
+2. **Check if error is about invalid model name**: Model might not exist or name is wrong
+3. **Check if error is about prompt content**: NSFW, sensitive, banned words
+4. **Check if error is about missing required inputs**: e.g., "prompt is required"
+
+SOLUTION RULES:
+- **Duration**: ALWAYS generate video LONGER than trim_duration ({trim_dur}s)
+- **Kling**: duration must be 5 or 10 (choose 10 if trim > 5)
+- **Wan**: duration must be 5 or 10 (choose 10 if trim > 5)
+- **Hailuo**: duration must be 6 or 10 (choose 10 if trim > 6, and use 768p for 10s)
+- **Veo**: duration must be 4, 6, or 8 (choose based on trim)
+- **Model names**: Use EXACT names from documentation (e.g., "minimax/hailuo-2.3" NOT "minimax/video-01")
+- **Prompt**: Keep visual intent but remove NSFW/sensitive content
+- **Never suggest omni-human unless current model is omni-human**
+
+Return JSON ONLY:
+{{
+  "prompt": "corrected or original prompt",
+  "model": "corrected exact model name from docs",
+  "duration": corrected_duration_integer,
+  "reasoning": "brief explanation of what you fixed"
+}}"""
                                     
-                                    Analyze the error. 
-                                    1. If it's a prompt issue (e.g. NSFW, banned words, sensitive content), rewrite the prompt to be safe but keep the visual core.
-                                    2. If it's a model parameter issue (e.g. image_url missing), suggest a fix or a different model if applicable.
-                                    3. If the model is failing repeatedly, suggest a fallback model (e.g. google/veo-3.1 or kwaivgi/kling-v2.5-turbo-pro).
-                                    
-                                    Return JSON ONLY: {{ "prompt": "corrected prompt", "model": "current or fallback model" }}
-                                    """
                                     track_text(analysis_prompt, "")
                                     resp = model_text.generate_content(analysis_prompt)
                                     track_text("", resp.text)
                                     fix_json = json.loads(self._clean_json(resp.text))
                                     
-                                    if "prompt" in fix_json: 
+                                    # Apply fixes
+                                    if "prompt" in fix_json and  fix_json["prompt"]:
+                                        old_prompt = current_prompt
                                         current_prompt = fix_json["prompt"]
-                                        print(f"Task {idx}: Gemini corrected prompt.")
-                                    if "model" in fix_json and fix_json["model"] != current_model:
+                                        if old_prompt != current_prompt:
+                                            print(f"  → Task {idx}: Gemini corrected prompt")
+                                            
+                                    if "model" in fix_json and fix_json["model"] and fix_json["model"] in available_models:
+                                        old_model = current_model
                                         current_model = fix_json["model"]
-                                        print(f"Task {idx}: Switching model to {current_model}")
+                                        if old_model != current_model:
+                                            print(f"  → Task {idx}: Switching model: {old_model} → {current_model}")
+                                            
+                                    if "duration" in fix_json and fix_json["duration"]:
+                                        old_dur = current_duration
+                                        current_duration = int(fix_json["duration"])
+                                        if old_dur != current_duration:
+                                            print(f"  → Task {idx}: Corrected duration: {old_dur}s → {current_duration}s")
+                                    
+                                    if "reasoning" in fix_json:
+                                        print(f"  → Gemini: {fix_json['reasoning']}")
                                         
                                 except Exception as gemini_err:
-                                    print(f"Task {idx}: Gemini analysis failed: {gemini_err}")
-                                    # Basic fallback if Gemini fails
-                                    if "sensitive" in str(e).lower():
-                                        current_prompt = "A beautiful cinematic scene, safe for work, artistic style."
+                                    print(f"  ✗ Task {idx}: Gemini analysis failed: {gemini_err}")
+                                    # Basic heuristic fallback
+                                    if "duration" in error_msg.lower():
+                                        # Try to parse error for duration requirements
+                                        if "kling" in current_model or "wan-video" in current_model:
+                                            current_duration = 10 if trim_dur > 5 else 5
+                                            print(f"  → Fallback: Set duration to {current_duration}s")
+                                        elif "hailuo" in current_model:
+                                            current_duration = 10 if trim_dur > 6 else 6
+                                            print(f"  → Fallback: Set duration to {current_duration}s")
+                                            
+                                    if "sensitive" in error_msg.lower() or "flagged" in error_msg.lower():
+                                        current_prompt = f"A cinematic {task['video_trigger_prompt']}, beautiful artistic scene, safe for work, professional quality"
+                                        print(f"  → Fallback: Sanitized prompt due to content filter")
+                                
+                                # Brief delay before retry
+                                await asyncio.sleep(1)
                             else:
-                                raise e
+                                # ABSOLUTELY NO STATIC FALLBACK - RAISE ERROR
+                                raise Exception(f"Task {idx} failed after {max_retries+1} attempts. Last error: {error_msg}")
 
                     # Download
                     if save_segments: 
@@ -2467,33 +2583,9 @@ class SceneGenNode:
                     return (idx, local_path, fname, current_prompt)
                     
                 except Exception as e:
-                    print(f"Task {idx} Failed: {e}. Creating fallback video...")
-                    try:
-                        # Fallback: Create video from start image
-                        if save_segments: 
-                            fname = f"{prefix}_{idx:03d}_fallback.mp4"
-                            local_path = os.path.join(session_dir, fname)
-                        else: 
-                            fname = f"seg_{idx:03d}_fallback.mp4"
-                            local_path = os.path.join(session_dir, fname)
-                        
-                        dur = task["trim_duration"]
-                        
-                        # ffmpeg command to create video from image
-                        cmd = [
-                            "ffmpeg", "-y", "-loop", "1", "-i", img_path, "-t", str(dur),
-                            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "24", 
-                            "-vf", f"scale={img_w}:{img_h}:force_original_aspect_ratio=decrease,pad={img_w}:{img_h}:(ow-iw)/2:(oh-ih)/2",
-                            "-an", local_path
-                        ]
-                        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                        
-                        print(f"Task {idx} Fallback created successfully.")
-                        return (idx, local_path, fname, "FALLBACK: " + task["prompt"])
-                        
-                    except Exception as e2:
-                        print(f"Task {idx} Fallback Failed: {e2}")
-                        return (idx, None, None, None)
+                    # NO FALLBACK - JUST RAISE
+                    print(f"✗ Task {idx} FAILED COMPLETELY: {e}")
+                    raise e
                 finally:
                     try: os.unlink(img_path); os.unlink(aud_path)
                     except: pass
