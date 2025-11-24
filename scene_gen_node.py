@@ -1253,13 +1253,31 @@ class SceneGenNode:
                         img = ref_images_pil[idx]
                         cat = r.get("category", "").lower()
                         name = r.get("name", f"ref_{idx}")
+                        
+                        # Store in asset library
                         asset_library[name] = img
+                        
+                        # ALWAYS save reference assets to disk (needed for cross-referencing)
+                        fname = f"ref_{name}.png"
+                        img_resized = img.resize((img_w, img_h))  # Match project resolution
+                        img_resized.save(os.path.join(session_dir, fname))
+                        
+                        # Add to usage stats and report state
+                        usage_stats["generated_assets"].append({"name": name, "type": f"Reference {cat.capitalize()}", "file": fname})
+                        report_state["assets"].append({
+                            "name": name, 
+                            "type": f"Reference {cat.capitalize()}", 
+                            "file": fname, 
+                            "prompt": "User-provided reference image"
+                        })
+                        
+                        # Categorize
                         if "env" in cat: env_imgs.append(img)
                         elif "prop" in cat: prop_imgs.append(img)
                         elif "actor" in cat: actor_imgs.append(img)
                         else: actor_imgs.append(img)
                         
-                        print(f"[SceneGen] Loaded Reference Asset: {name} ({cat})")
+                        print(f"[SceneGen] Loaded Reference Asset: {name} ({cat}) -> saved as {fname}")
             except Exception as e:
                 print(f"Stage 2.5 Error: {e}")
 
@@ -1535,10 +1553,7 @@ class SceneGenNode:
             if ref_name in asset_library:
                 print(f"  -> Reference Asset '{ref_name}' already loaded from Stage 2.5")
                 completed.add(ref_name)
-                # Add to report state for display
-                if save_assets:
-                    cat = ref_asset["category"].lower()
-                    report_state["assets"].append({"name": ref_name, "type": cat, "file": "reference_image", "prompt": "User-provided reference"})
+                # Note: Reference assets are already added to report_state in Stage 2.5
             else:
                 print(f"  -> WARNING: Reference Asset '{ref_name}' not found in asset_library! Will attempt to generate.")
                 assets_to_generate.append(ref_asset)
