@@ -2569,7 +2569,7 @@ Return JSON ONLY:
                                         print(f"  → Fallback: Sanitized prompt due to content filter")
                                 
                                 # Brief delay before retry
-                                await asyncio.sleep(1)
+                                time.sleep(1)
                             else:
                                 # ABSOLUTELY NO STATIC FALLBACK - RAISE ERROR
                                 raise Exception(f"Task {idx} failed after {max_retries+1} attempts. Last error: {error_msg}")
