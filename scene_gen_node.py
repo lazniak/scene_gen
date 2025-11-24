@@ -802,6 +802,42 @@ class SceneGenNode:
             renderGallery(data.assets, 'assets-gallery', 'asset');
             renderGallery(data.videos, 'videos-gallery', 'video');
             
+            // 4.5. Render Final Video
+            const videoBox = document.getElementById('final-video-box');
+            const btnDlVideo = document.getElementById('btn-dl-video');
+            
+            if (data.final_video) {{
+                const videoFile = data.final_video;
+                // Construct the path - assuming status.js is in the same directory as the video
+                const videoPath = videoFile;
+                
+                if (videoBox) {{
+                    videoBox.innerHTML = `
+                        <video controls style="width: 100%; max-width: 100%; border-radius: 8px;">
+                            <source src="${{videoPath}}" type="video/mp4">
+                            Your browser does not support the video tag.
+                        </video>
+                    `;
+                }}
+                
+                if (btnDlVideo) {{
+                    btnDlVideo.href = videoPath;
+                    btnDlVideo.download = videoFile;
+                    btnDlVideo.classList.remove('disabled');
+                }}
+            }} else if (data.done || data.error) {{
+                // Process is done but no video - show message
+                if (videoBox) {{
+                    videoBox.innerHTML = `
+                        <div style="padding: 40px; text-align: center; color: #888;">
+                            <div style="font-size: 1.2em; margin-bottom: 10px;">⚠️</div>
+                            <div>No video was generated</div>
+                            <div style="font-size: 0.8em; margin-top: 10px;">Check logs for details</div>
+                        </div>
+                    `;
+                }}
+            }}
+            
             // 5. Render Timeline
             const tContainer = document.getElementById('timeline');
             if (tContainer) {{
