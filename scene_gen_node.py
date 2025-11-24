@@ -701,6 +701,27 @@ class SceneGenNode:
                 console.log('Copied:', text);
             }});
         }}
+        
+        function copyData(dataKey) {{
+            if (!currentData) return;
+            
+            let dataToCopy = currentData[dataKey];
+            
+            // Handle montage specially - extract scenes if it's an object
+            if (dataKey === 'montage' && dataToCopy) {{
+                if (typeof dataToCopy === 'object' && !Array.isArray(dataToCopy)) {{
+                    dataToCopy = dataToCopy.scenes || dataToCopy;
+                }}
+            }}
+            
+            const jsonStr = JSON.stringify(dataToCopy, null, 2);
+            navigator.clipboard.writeText(jsonStr).then(() => {{
+                console.log(`Copied ${{dataKey}} to clipboard`);
+                alert(`${{dataKey.charAt(0).toUpperCase() + dataKey.slice(1)}} copied to clipboard!`);
+            }}).catch(err => {{
+                console.error('Failed to copy:', err);
+            }});
+        }}
 
         // --- Main Update Loop ---
         function updateStatus() {{
@@ -782,28 +803,44 @@ class SceneGenNode:
             renderGallery(data.videos, 'videos-gallery', 'video');
             
             // 5. Render Timeline
-            const tContainer = document.getElementById('timeline-container');
+            const tContainer = document.getElementById('timeline');
             if (tContainer) {{
-                const scenes = data.montage || safeParse(data.prompts) || [];
+                // Handle both formats: {{scenes: [...]}} or [...]
+                let montageData = data.montage || safeParse(data.prompts) || [];
+                
+                // If montageData is an object with 'scenes' key, extract the array
+                let scenes = montageData;
+                if (montageData && typeof montageData === 'object' && !Array.isArray(montageData)) {{
+                    scenes = montageData.scenes || [];
+                }}
+                
                 if (scenes && scenes.length > 0) {{
                     let html = '';
                     const zoomEl = document.getElementById('timeline-zoom');
                     const zoom = zoomEl ? zoomEl.value : 50;
                     
                     scenes.forEach((scene, idx) => {{
-                        const duration = scene.duration || 5;
+                        const duration = scene.trim_duration || scene.duration || 5;
                         const width = duration * (zoom / 5); 
                         
                         const img = scene.image_file || scene.image || '';
                         const label = `Scene ${{idx + 1}}`;
-                        const time = `${{duration}}s`;
+                        const time = `${{duration.toFixed(2)}}s`;
                         const desc = scene.description || scene.visual || "No description";
+                        const model = scene.model || "Unknown";
+                        const assets = scene.assets ? scene.assets.join(', ') : '';
+                        const sync = scene.sync_reference || '';
 
                         html += `<div class="timeline-segment" style="width: ${{width}}px; flex-shrink: 0;" onclick="openLightbox('timeline', ${{idx}})">
                             ${{img ? `<img src="${{img}}" loading="lazy">` : '<div style="width:100%;height:100%;background:#333;"></div>'}}
                             <div class="seg-label">${{label}}</div>
                             <div class="seg-time">${{time}}</div>
-                            <div class="seg-info">${{desc}}</div>
+                            <div class="seg-info" style="font-size: 0.7em; padding: 2px;">
+                                <div style="color: #4CAF50;">${{model}}</div>
+                                ${{assets ? `<div style="color: #888;">Assets: ${{assets}}</div>` : ''}}
+                                ${{sync ? `<div style="color: #888; font-style: italic;">${{sync}}</div>` : ''}}
+                                <div style="margin-top: 4px;">${{desc}}</div>
+                            </div>
                         </div>`;
                     }});
                     tContainer.innerHTML = html;
