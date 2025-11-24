@@ -647,6 +647,7 @@ class SceneGenNode:
         let currentData = {{}};
         let galleryItems = [];
         let currentSlideIndex = 0;
+        let lastRenderedVideo = null;
 
         // Global data receiver for JSONP
         window.receiveData = function(data) {{
@@ -812,7 +813,8 @@ class SceneGenNode:
                 // Construct the path - assuming status.js is in the same directory as the video
                 const videoPath = videoFile;
                 
-                if (videoBox) {{
+                if (videoBox && lastRenderedVideo !== videoPath) {{
+                    lastRenderedVideo = videoPath;
                     videoBox.innerHTML = `
                         <video controls style="width: 100%; max-width: 100%; border-radius: 8px;">
                             <source src="${{videoPath}}" type="video/mp4">
@@ -828,7 +830,8 @@ class SceneGenNode:
                 }}
             }} else if (data.done || data.error) {{
                 // Process is done but no video - show message
-                if (videoBox) {{
+                if (videoBox && lastRenderedVideo !== 'error') {{
+                    lastRenderedVideo = 'error';
                     videoBox.innerHTML = `
                         <div style="padding: 40px; text-align: center; color: #888;">
                             <div style="font-size: 1.2em; margin-bottom: 10px;">⚠️</div>
