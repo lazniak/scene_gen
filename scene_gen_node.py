@@ -805,6 +805,7 @@ class SceneGenNode:
             // 4.5. Render Final Video
             const videoBox = document.getElementById('final-video-box');
             const btnDlVideo = document.getElementById('btn-dl-video');
+            const btnDlEdl = document.getElementById('btn-dl-edl');
             
             if (data.final_video) {{
                 const videoFile = data.final_video;
@@ -836,6 +837,14 @@ class SceneGenNode:
                         </div>
                     `;
                 }}
+            }}
+            
+            // Handle EDL download button
+            if (data.edl_file && btnDlEdl) {{
+                const edlPath = data.edl_file;
+                btnDlEdl.href = edlPath;
+                btnDlEdl.download = data.edl_file;
+                btnDlEdl.classList.remove('disabled');
             }}
             
             // 5. Render Timeline
@@ -2836,6 +2845,7 @@ Return JSON ONLY:
         debug_s11 = f"Final video: {final_video_path}"
         with open(os.path.join(session_dir, "stage11_output.txt"), "w", encoding="utf-8") as f: f.write(debug_s11)
         
+        # Add final video to report (basename is fine - it's in same dir as status.js)
         report_state["final_video"] = os.path.basename(final_video_path)
         update_report("Complete", 100, "Process finished successfully.")
         cost_json = json.dumps(usage_stats, indent=2)
@@ -2881,10 +2891,14 @@ Return JSON ONLY:
                     
                     rec_in_sec = rec_out_sec
             
+            # Add EDL to report (basename is fine - it's in same dir as status.js)
             report_state["edl_file"] = os.path.basename(edl_path)
             update_report("Complete", 100, "EDL Generated.")
             
             debug_s11 += f"\nEDL saved to: {edl_path}"
+        else:
+            # Ensure edl_file is None if not generated
+            report_state["edl_file"] = None
 
         # Prepare Outputs
         def to_tensor(imgs):
