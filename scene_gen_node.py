@@ -1289,11 +1289,18 @@ class SceneGenNode:
         - Do NOT create a new/duplicate asset for a character that already exists in references. Use the EXACT "name" from the reference list.
         - You can add NEW assets, but prioritize using the references where applicable.
         
+        CRITICAL INSTRUCTION FOR ASSET DESCRIPTIONS:
+        - **For Actors**: If an actor is holding/wearing a Prop, EXPLICITLY MENTION the Prop's name in the description.
+          Example: "Man in suit holding Prop_Microphone" or "wearing Prop_Period_Costume"
+        - **For Locations**: EXPLICITLY MENTION which Actors and Props should appear in this location.
+          Example: "Warsaw housing estate with Jaguar_XJ220 and Presenter_Man visible" or "includes Fiat_126p_Maluch parked nearby"
+        - This ensures proper cross-referencing during asset generation.
+        
         REQUIREMENTS:
         - "assets": A list of ALL assets (both Reference and New).
           - "name": Unique ID. For references, use the EXACT name from the list above.
           - "category": "Actor", "Prop", or "Location".
-          - "description": Visual description.
+          - "description": Visual description WITH explicit mentions of related assets (see above).
           - "parent_asset": If this is a variant or depends on another asset, name the parent.
           - "is_reference": boolean (true if from reference list)
         
@@ -1395,20 +1402,59 @@ class SceneGenNode:
                 input_parts.append(asset_library[parent_name])
                 print(f"  -> Generating {name} using parent {parent_name}")
             
-            # 2. Add Contextual Assets (Props mentioned in description)
-            # Scan description for names of existing assets (e.g. "holding Prop_Sword")
-            # Only for Actors and Locations
-            if "actor" in cat or "location" in cat or "env" in cat:
+            # 2. Add Contextual Assets - ENHANCED LOGIC
+            # Strategy:
+            # - For Props: No additional context (they're isolated objects)
+            # - For Actors: Add Props mentioned in description
+            # - For Locations/Environments: Add ALL relevant Actors and Props that might be in this scene
+            
+            context_assets_added = []
+            
+            if "actor" in cat:
+                # For Actors: Add Props that are mentioned or logically related
                 for existing_name, existing_img in asset_library.items():
-                    # Avoid self-reference and parent (already added)
-                    if existing_name != name and existing_name != parent_name:
-                        # Check if existing asset name is in description
-                        # Use simple string matching. Ideally, we'd use regex or exact word match.
-                        if existing_name in desc:
+                    if existing_name == name or existing_name == parent_name:
+                        continue
+                    
+                    # Check if it's a Prop and if it's mentioned in description
+                    if any(keyword in existing_name.lower() for keyword in ["prop", "item", "object"]):
+                        # Check if prop name is in description (case-insensitive)
+                        if existing_name.lower() in desc.lower() or any(word in desc.lower() for word in existing_name.lower().split('_')):
                             input_parts.append(existing_img)
-                            print(f"  -> Generating {name} with context {existing_name}")
-                            # Limit to 2 extra context images to avoid confusion
-                            if len(input_parts) >= 4: break
+                            context_assets_added.append(existing_name)
+                            if len(input_parts) >= 6: break  # Limit: prompt + parent + 4 context
+            
+            elif "location" in cat or "env" in cat:
+                # For Locations/Environments: Add ALL Actors and relevant Props to populate the scene
+                # This ensures the environment feels lived-in and contextually accurate
+                
+                # First, add Actors mentioned in description
+                for existing_name, existing_img in asset_library.items():
+                    if existing_name == name or existing_name == parent_name:
+                        continue
+                    
+                    if "actor" in existing_name.lower() or "character" in existing_name.lower() or "host" in existing_name.lower() or "presenter" in existing_name.lower():
+                        # Check if actor is mentioned in description
+                        if existing_name.lower() in desc.lower() or any(word in desc.lower() for word in existing_name.lower().split('_')):
+                            input_parts.append(existing_img)
+                            context_assets_added.append(existing_name)
+                            if len(input_parts) >= 8: break  # Locations can have more context
+                
+                # Then, add Props mentioned in description
+                if len(input_parts) < 8:
+                    for existing_name, existing_img in asset_library.items():
+                        if existing_name == name or existing_name == parent_name or existing_name in context_assets_added:
+                            continue
+                        
+                        if "prop" in existing_name.lower() or "item" in existing_name.lower() or "car" in existing_name.lower() or "vehicle" in existing_name.lower():
+                            # Check if prop is mentioned or contextually relevant
+                            if existing_name.lower() in desc.lower() or any(word in desc.lower() for word in existing_name.lower().split('_')):
+                                input_parts.append(existing_img)
+                                context_assets_added.append(existing_name)
+                                if len(input_parts) >= 8: break
+            
+            if context_assets_added:
+                print(f"  -> Generating {name} with context: {', '.join(context_assets_added)}")
             
             if render_mode == "Prompt Mode":
                 # Skip actual image generation
