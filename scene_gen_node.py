@@ -24,6 +24,7 @@ import folder_paths
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 import socket
+import math
 
 class SceneGenNode:
     def __init__(self):
@@ -70,6 +71,7 @@ class SceneGenNode:
                 "save_edl": ("BOOLEAN", {"default": True, "tooltip": "If True, exports a CMX 3600 .edl file for importing the timeline into Premiere Pro/DaVinci Resolve."}),
                 "open_coffee_link": ("BOOLEAN", {"default": True, "tooltip": "Support the creator! Opens Buy Me a Coffee page after generation."}),
                 "render_mode": (["Full Render", "Prompt Mode"], {"default": "Full Render", "tooltip": "Full Render: Generates video using Replicate. Prompt Mode: Generates prompts and assets, then creates a slideshow from start frames (skips Replicate)."}),
+                "dialogues_gen": ("BOOLEAN", {"default": False, "tooltip": "Enable dialogue generation for supported models (Veo3, Wan 2.5). Prevents trimming of dialogue shots."}),
                 "open_report": ("BOOLEAN", {"default": True, "tooltip": "Opens a live HTML report that updates in real-time during generation."}),
             },
             "optional": {
@@ -91,7 +93,7 @@ class SceneGenNode:
     FUNCTION = "process"
     CATEGORY = "Scene Gen"
 
-    def process(self, audio, gemini_api_key, replicate_api_token, prompt_instruction, filename_prefix, fps, model_text, model_image, creativity, dynamicity, video_quality, aspect_ratio, resolution_multiplier, enable_prompt_expansion, save_segments, save_images, save_assets, gemini_concurrency, replicate_concurrency, use_wan_fast, use_wan_2_5, use_kling_turbo, use_omni_human, use_hailuo, use_hailuo_fast, use_veo_3_1, use_veo_3_1_fast, aggressive_edit, word_influence, save_edl, open_coffee_link, render_mode, open_report, reference_images=None):
+    def process(self, audio, gemini_api_key, replicate_api_token, prompt_instruction, filename_prefix, fps, model_text, model_image, creativity, dynamicity, video_quality, aspect_ratio, resolution_multiplier, enable_prompt_expansion, save_segments, save_images, save_assets, gemini_concurrency, replicate_concurrency, use_wan_fast, use_wan_2_5, use_kling_turbo, use_omni_human, use_hailuo, use_hailuo_fast, use_veo_3_1, use_veo_3_1_fast, aggressive_edit, word_influence, save_edl, open_coffee_link, render_mode, dialogues_gen, open_report, reference_images=None):
         print(f"\n[SceneGen] === Starting Iterative Process ===")
         
         if not gemini_api_key: raise ValueError("Gemini API Key is required.")
@@ -135,7 +137,7 @@ class SceneGenNode:
                 model_text, model_image, creativity, dynamicity, video_quality, aspect_ratio, resolution_multiplier,
                 enable_prompt_expansion, save_segments, save_images, save_assets, gemini_concurrency, replicate_concurrency,
                 use_wan_fast, use_wan_2_5, use_kling_turbo, use_omni_human, use_hailuo, use_hailuo_fast, use_veo_3_1, use_veo_3_1_fast, 
-                aggressive_edit, word_influence, save_edl, ref_images_pil, render_mode, open_report
+                aggressive_edit, word_influence, save_edl, ref_images_pil, render_mode, dialogues_gen, open_report
             ))
             result = future.result()
             
@@ -148,7 +150,7 @@ class SceneGenNode:
             print(f"[SceneGen] === Process Complete ===\n")
             return result
 
-    async def async_process(self, audio_data, sample_rate, instruction, prefix, session_dir, fps, model_text_name, model_image_name, creativity, dynamicity, video_quality, aspect_ratio, resolution_multiplier, enable_prompt_expansion, save_segments, save_images, save_assets, gemini_concurrency, replicate_concurrency, use_wan_fast, use_wan_2_5, use_kling_turbo, use_omni_human, use_hailuo, use_hailuo_fast, use_veo_3_1, use_veo_3_1_fast, aggressive_edit, word_influence, save_edl, ref_images_pil, render_mode, open_report):
+    async def async_process(self, audio_data, sample_rate, instruction, prefix, session_dir, fps, model_text_name, model_image_name, creativity, dynamicity, video_quality, aspect_ratio, resolution_multiplier, enable_prompt_expansion, save_segments, save_images, save_assets, gemini_concurrency, replicate_concurrency, use_wan_fast, use_wan_2_5, use_kling_turbo, use_omni_human, use_hailuo, use_hailuo_fast, use_veo_3_1, use_veo_3_1_fast, aggressive_edit, word_influence, save_edl, ref_images_pil, render_mode, dialogues_gen, open_report):
         
         # Usage Tracking
         usage_stats = {
@@ -205,8 +207,8 @@ class SceneGenNode:
 
         # --- Live Reporting Setup ---
         # --- Live Reporting Setup ---
-        report_filename = f"report_{prefix}.html"
-        report_js_filename = f"report_data_{prefix}.js"
+        report_filename = f"status_{prefix}.html"
+        report_js_filename = f"status_data_{prefix}.js"
         
         # Save report INSIDE the session directory
         report_path = os.path.join(session_dir, report_filename)
@@ -279,7 +281,7 @@ class SceneGenNode:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scene Gen Live Report - {prefix}</title>
+    <title>Scene Gen Live Status - {prefix}</title>
     <style>
         body {{ font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #121212; color: #e0e0e0; margin: 0; padding: 0; }}
         .container {{ max-width: 1400px; margin: 0 auto; padding: 20px; }}
@@ -300,10 +302,13 @@ class SceneGenNode:
         .progress-container {{ flex-grow: 1; margin: 0 20px; background: #333; height: 10px; border-radius: 5px; overflow: hidden; }}
         .progress-bar {{ height: 100%; background: #4caf50; width: 0%; transition: width 0.5s ease; }}
         
-        /* Layout */
+        /* Layout & Active Stage */
         .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; margin-top: 20px; }}
-        .card {{ background: #1e1e1e; border-radius: 10px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); display: flex; flex-direction: column; }}
+        .card {{ background: #1e1e1e; border-radius: 10px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); display: flex; flex-direction: column; transition: all 0.3s ease; border: 1px solid transparent; position: relative; }}
         .card h3 {{ margin-top: 0; border-bottom: 1px solid #333; padding-bottom: 10px; display: flex; align-items: center; justify-content: flex-start; gap: 10px; }}
+        
+        .active-stage {{ border-color: #4caf50; box-shadow: 0 0 15px rgba(76, 175, 80, 0.3); transform: translateY(-2px); }}
+        .active-stage h3 {{ color: #4caf50; }}
         
         /* Final Video */
         .final-video-container {{ width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 5px; overflow: hidden; display: flex; align-items: center; justify-content: center; }}
@@ -321,11 +326,17 @@ class SceneGenNode:
         .timeline-segment .seg-info {{ position: absolute; bottom: 25px; left: 5px; right: 5px; font-size: 0.6rem; background: rgba(0,0,0,0.7); padding: 2px 4px; border-radius: 2px; color: #ccc; max-height: 0; overflow: hidden; transition: max-height 0.3s; }}
         .timeline-segment:hover .seg-info {{ max-height: 60px; }}
 
-        /* Data Visualization */
-        .data-display {{ font-size: 0.9rem; color: #ccc; max-height: 300px; overflow-y: auto; }}
-        .kv-row {{ display: flex; border-bottom: 1px solid #333; padding: 5px 0; }}
-        .kv-key {{ font-weight: bold; width: 120px; color: #888; flex-shrink: 0; }}
-        .kv-val {{ flex-grow: 1; }}
+        /* Interactive JSON List */
+        .data-display {{ font-size: 0.9rem; color: #ccc; max-height: 300px; overflow-y: auto; font-family: 'Consolas', monospace; }}
+        .json-list {{ list-style: none; padding: 0; margin: 0; }}
+        .json-item {{ padding: 5px 0; border-bottom: 1px solid #333; display: flex; flex-direction: column; }}
+        .json-row {{ display: flex; align-items: baseline; }}
+        .json-key {{ color: #888; font-weight: bold; margin-right: 10px; min-width: 120px; cursor: pointer; transition: color 0.2s; display: flex; align-items: center; }}
+        .json-key:hover {{ color: #4caf50; }}
+        .json-key::after {{ content: '📋'; font-size: 0.8em; margin-left: 5px; opacity: 0; transition: opacity 0.2s; }}
+        .json-key:hover::after {{ opacity: 1; }}
+        .json-val {{ color: #ddd; word-break: break-word; flex: 1; }}
+        .json-sublist {{ margin-left: 20px; border-left: 2px solid #333; padding-left: 10px; margin-top: 5px; }}
         
         .palette-container {{ display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }}
         .color-swatch {{ width: 60px; height: 60px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.8); box-shadow: 0 2px 5px rgba(0,0,0,0.3); transition: transform 0.2s; cursor: pointer; }}
@@ -372,7 +383,6 @@ class SceneGenNode:
         /* Help System */
         .card {{ position: relative; }}
         .help-btn {{ position: absolute; top: 15px; right: 15px; width: 24px; height: 24px; border-radius: 50%; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: #aaa; font-size: 0.8rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; z-index: 20; }}
-        .help-btn {{ position: absolute; top: 15px; right: 15px; width: 24px; height: 24px; border-radius: 50%; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: #aaa; font-size: 0.8rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; z-index: 20; }}
         .help-btn:hover {{ background: #4caf50; color: white; border-color: #4caf50; }}
         
         .copy-btn {{ cursor: pointer; margin-right: 8px; font-size: 1rem; opacity: 0.7; transition: opacity 0.2s; background: none; border: none; color: #ccc; padding: 0; }}
@@ -398,10 +408,13 @@ class SceneGenNode:
         .lightbox-content img, .lightbox-content video {{ max-width: 100%; max-height: 90vh; object-fit: contain; border-radius: 5px; box-shadow: 0 10px 50px rgba(0,0,0,0.8); }}
         .lightbox-close {{ position: absolute; top: 20px; right: 40px; color: white; font-size: 40px; font-weight: bold; cursor: pointer; z-index: 2001; transition: color 0.2s; }}
         .lightbox-close:hover {{ color: #f44336; }}
-        .lightbox-nav {{ position: absolute; top: 50%; transform: translateY(-50%); color: white; font-size: 40px; font-weight: bold; cursor: pointer; padding: 20px; background: rgba(0,0,0,0.5); border-radius: 5px; transition: all 0.2s; user-select: none; }}
-        .lightbox-nav:hover {{ background: rgba(76,175,80,0.8); }}
-        .lightbox-prev {{ left: 20px; }}
-        .lightbox-next {{ right: 20px; }}
+        
+        /* Lightbox Navigation */
+        .nav-btn {{ position: absolute; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.5); color: white; border: none; width: 50px; height: 50px; border-radius: 50%; font-size: 24px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; user-select: none; }}
+        .nav-btn:hover {{ background: rgba(76,175,80,0.8); transform: translateY(-50%) scale(1.1); }}
+        .nav-prev {{ left: 20px; }}
+        .nav-next {{ right: 20px; }}
+        
         .lightbox-caption {{ position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); color: white; background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 5px; font-size: 1rem; max-width: 80%; text-align: center; }}
 
     </style>
@@ -411,7 +424,7 @@ class SceneGenNode:
         <header>
             <div class="header-content">
                 <div class="title-group">
-                    <h1>Scene Gen Report</h1>
+                    <h1>Scene Gen Status</h1>
                     <div class="subtitle">Project: {prefix}</div>
                 </div>
                 <div class="gh-links">
@@ -432,7 +445,7 @@ class SceneGenNode:
         </div>
         
         <!-- Final Video Section -->
-        <div class="card" style="margin-top: 20px;">
+        <div id="card-s11" class="card" style="margin-top: 20px;">
             <button class="help-btn" onclick="showHelp('final_video')">?</button>
             <h3>
                 Final Video Output
@@ -447,7 +460,7 @@ class SceneGenNode:
         </div>
 
         <!-- Timeline Section -->
-        <div class="card" style="margin-top: 20px;">
+        <div id="card-timeline" class="card" style="margin-top: 20px;">
             <button class="help-btn" onclick="showHelp('timeline')">?</button>
             <h3>
                 <button class="copy-btn" onclick="copyData('montage')" title="Copy Montage JSON">📋</button>
@@ -472,7 +485,7 @@ class SceneGenNode:
         
         <div class="grid">
             <!-- Style & Analysis -->
-            <div class="card">
+            <div id="card-s1" class="card">
                 <button class="help-btn" onclick="showHelp('analysis')">?</button>
                 <h3>
                     <button class="copy-btn" onclick="copyData('analysis')" title="Copy Analysis">📋</button>
@@ -486,7 +499,7 @@ class SceneGenNode:
                 </div>
             </div>
 
-            <div class="card">
+            <div id="card-s2" class="card">
                 <button class="help-btn" onclick="showHelp('style')">?</button>
                 <h3>
                     <button class="copy-btn" onclick="copyData('style')" title="Copy Style Data">📋</button>
@@ -501,7 +514,7 @@ class SceneGenNode:
             </div>
 
             <!-- Narrative Planning -->
-            <div class="card">
+            <div id="card-s3" class="card">
                 <button class="help-btn" onclick="showHelp('narrative')">?</button>
                 <h3>
                     <button class="copy-btn" onclick="copyData('narrative')" title="Copy Narrative Data">📋</button>
@@ -516,7 +529,7 @@ class SceneGenNode:
             </div>
             
             <!-- Color Palette -->
-            <div class="card">
+            <div id="card-s3-palette" class="card">
                 <button class="help-btn" onclick="showHelp('palette')">?</button>
                 <h3>
                     <button class="copy-btn" onclick="copyData('palette')" title="Copy Palette JSON">📋</button>
@@ -533,7 +546,7 @@ class SceneGenNode:
 
         <div class="grid">
             <!-- Prompts -->
-            <div class="card">
+            <div id="card-s7" class="card">
                 <button class="help-btn" onclick="showHelp('prompts')">?</button>
                 <h3>
                     <button class="copy-btn" onclick="copyData('prompts')" title="Copy Prompts">📋</button>
@@ -548,7 +561,7 @@ class SceneGenNode:
             </div>
 
             <!-- Motion -->
-            <div class="card">
+            <div id="card-s8" class="card">
                 <button class="help-btn" onclick="showHelp('motion')">?</button>
                 <h3>
                     <button class="copy-btn" onclick="copyData('motion')" title="Copy Motion Data">📋</button>
@@ -563,7 +576,7 @@ class SceneGenNode:
             </div>
 
             <!-- Costs -->
-            <div class="card">
+            <div id="card-costs" class="card">
                 <button class="help-btn" onclick="showHelp('costs')">?</button>
                 <h3>
                     <button class="copy-btn" onclick="copyData('costs')" title="Copy Cost Data">📋</button>
@@ -575,7 +588,7 @@ class SceneGenNode:
         
         <div id="dynamic-assets-container" class="grid">
             <!-- Dynamic Asset Categories will be injected here -->
-            <div class="card">
+            <div id="card-assets" class="card">
                 <button class="help-btn" onclick="showHelp('assets')">?</button>
                 <h3>Generated Assets</h3>
                 <div id="assets-gallery" class="gallery"></div>
@@ -583,12 +596,12 @@ class SceneGenNode:
         </div>
         
         <div class="grid">
-            <div class="card">
+            <div id="card-segments" class="card">
                 <button class="help-btn" onclick="showHelp('segments')">?</button>
                 <h3>Video Segments</h3>
                 <div id="videos-gallery" class="gallery"></div>
             </div>
-             <div class="card">
+             <div id="card-logs" class="card">
                 <button class="help-btn" onclick="showHelp('logs')">?</button>
                 <h3>Live Logs</h3>
                 <div id="logs" class="log-box"></div>
@@ -598,7 +611,7 @@ class SceneGenNode:
         <div class="footer">
             <p>Enjoying Scene Gen? Support the development!</p>
             <a href="https://www.buymeacoffee.com/EYB8tkx3tO" class="btn-coffee" target="_blank">
-                <img src="https://img.buymeacoffee.com/button-api/?text=Support project development&emoji=❤️&slug=EYB8tkx3tO&button_colour=FFDD00&font_colour=000000&font_family=Lato&outline_colour=000000&coffee_colour=ffffff" />
+                <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" >
             </a>
         </div>
     </div>
@@ -608,535 +621,376 @@ class SceneGenNode:
         <div class="modal-content">
             <span class="close-modal" onclick="closeHelp()">&times;</span>
             <h2 id="helpTitle">Help</h2>
-            <div id="helpBody"></div>
+            <div id="helpContent"></div>
         </div>
     </div>
     
-    <!-- Lightbox Modal -->
-    <div id="lightbox" class="lightbox">
-        <span class="lightbox-close" onclick="closeLightbox()">&times;</span>
-        <div class="lightbox-prev lightbox-nav" onclick="navigateLightbox(-1)">&#10094;</div>
-        <div class="lightbox-next lightbox-nav" onclick="navigateLightbox(1)">&#10095;</div>
-        <div class="lightbox-content">
-            <img id="lightbox-img" style="display:none;">
-            <video id="lightbox-video" controls style="display:none;"></video>
+    <!-- Lightbox -->
+    <div id="lightbox" class="lightbox" onclick="closeLightbox(event)">
+        <span class="lightbox-close" onclick="closeLightbox(event)">&times;</span>
+        <button class="nav-btn nav-prev" onclick="changeSlide(-1, event)">&#10094;</button>
+        <button class="nav-btn nav-next" onclick="changeSlide(1, event)">&#10095;</button>
+        <div class="lightbox-content" id="lightbox-content">
+            <!-- Content injected via JS -->
         </div>
-        <div class="lightbox-caption" id="lightbox-caption"></div>
+        <div id="lightbox-caption" class="lightbox-caption"></div>
     </div>
 
     <script>
         const jsPath = '{js_filename}';
-        const sessionPath = '{js_session_path}';
-        const cancelPort = {self.cancel_port};
         
-        function cancelGeneration() {{
-            if (!confirm('Cancel generation? This will stop all tasks immediately.')) {{
+        let currentData = {{}};
+        let galleryItems = [];
+        let currentSlideIndex = 0;
+
+        // Global data receiver for JSONP
+        window.receiveData = function(data) {{
+            window.statusData = data;
+        }};
+
+        // --- Interactive JSON Renderer ---
+        function renderInteractiveJson(data, elementId) {{
+            const container = document.getElementById(elementId);
+            if (!container) return;
+            if (!data) {{
+                container.innerHTML = '<div style="color:#666; padding:10px;">No data available yet...</div>';
                 return;
             }}
             
-            fetch(`http://localhost:${{cancelPort}}/cancel`, {{
-                method: 'POST'
-            }})
-            .then(response => {{
-                if (response.ok) {{
-                    document.getElementById('status').innerText = 'Cancelled by user';
-                    document.getElementById('status').style.color = '#f44336';
-                    document.getElementById('btn-cancel').classList.add('hidden');
-                    alert('Generation cancelled. ComfyUI will proceed to the next step.');
+            let html = '<ul class="json-list">';
+            
+            function buildList(obj) {{
+                let listHtml = '';
+                for (const [key, value] of Object.entries(obj)) {{
+                    listHtml += '<li class="json-item">';
+                    listHtml += '<div class="json-row">';
+                    // Key with copy functionality
+                    listHtml += `<span class="json-key" onclick="copyText('${{key}}')" title="Click to copy key">${{key}}:</span>`;
+                    
+                    if (typeof value === 'object' && value !== null) {{
+                        listHtml += '<span class="json-val">[Object/Array]</span>';
+                        listHtml += '</div>';
+                        listHtml += '<div class="json-sublist"><ul class="json-list">';
+                        listHtml += buildList(value);
+                        listHtml += '</ul></div>';
+                    }} else {{
+                        let displayVal = value;
+                        if (typeof value === 'string' && value.startsWith('http')) {{
+                            displayVal = `<a href="${{value}}" target="_blank" style="color:#4caf50;">Link</a>`;
+                        }}
+                        listHtml += `<span class="json-val">${{displayVal}}</span>`;
+                        listHtml += '</div>';
+                    }}
+                    listHtml += '</li>';
                 }}
-            }})
-            .catch(err => {{
-                console.error('Cancel request failed:', err);
-                alert('Failed to cancel. Try using ComfyUI\\'s native Cancel button.');
-            }});
-        }}
-        
-        const helpContent = {{
-            "final_video": {{
-                title: "Final Video Output",
-                text: "This is the result of the entire generation process. It combines all generated video segments, stitched together and synchronized with your original audio. You can download the Edit Decision List (EDL) to import this timeline into professional video editing software like DaVinci Resolve or Premiere Pro."
-            }},
-            "timeline": {{
-                title: "Montage Timeline",
-                text: "Visualizes the structure of your video. Each block represents a scene generated by the AI. The width corresponds to the duration. Hover over segments to see the specific prompt and description used to generate that shot."
-            }},
-            "style": {{
-                title: "Style & Atmosphere",
-                text: "Derived from your audio analysis and instructions. This defines the visual language of the video, including mood, lighting, and artistic direction. The AI uses this 'Style Bible' to ensure consistency across all generated assets."
-            }},
-            "palette": {{
-                title: "Color Palette",
-                text: "The color scheme generated for your video to match the mood of the music. These colors are injected into the image generation prompts to maintain color harmony throughout the sequence."
-            }},
-            "costs": {{
-                title: "Estimated Costs",
-                text: "A real-time estimate of the API costs for this session. It tracks token usage for Gemini (Text/Image) and generation time for Replicate video models. Actual costs may vary slightly based on provider pricing changes."
-            }},
-            "assets": {{
-                title: "Generated Assets",
-                text: "The collection of static images generated by Gemini to serve as 'Start Frames' or reference sheets for the video. These images guide the video models to ensure the characters and environments look consistent."
-            }},
-            "segments": {{
-                title: "Video Segments",
-                text: "Individual video clips generated by models like Kling, Hailuo, or Veo. Each clip corresponds to a section of the timeline. You can download individual clips here if you want to re-edit them manually."
-            }},
-            "analysis": {{
-                title: "Audio Analysis (S1)",
-                text: "The initial analysis of your audio file by Gemini. It identifies genre, mood, lyrics, and structural elements to guide the entire generation process."
-            }},
-            "prompts": {{
-                title: "Scene Prompts (S6)",
-                text: "The specific visual prompts generated for each scene. These are constructed by combining the Style Bible, Asset descriptions, and the specific narrative moment."
-            }},
-            "motion": {{
-                title: "Motion Logic (S8)",
-                text: "The logic used to determine camera movement and subject action for each shot, ensuring the video flows dynamically and matches the energy of the audio."
-            }},
-            "logs": {{
-                title: "Live Logs",
-                text: "A real-time stream of the internal operations of the Scene Gen node. Useful for monitoring progress and debugging if something seems stuck."
-            }}
-        }};
-
-        function showHelp(key) {{
-            const data = helpContent[key];
-            if (data) {{
-                document.getElementById('helpTitle').innerText = data.title;
-                document.getElementById('helpBody').innerText = data.text;
-                document.getElementById('helpModal').style.display = "block";
-            }}
-        }}
-
-        function closeHelp() {{
-            document.getElementById('helpModal').style.display = "none";
-        }}
-        
-        window.onclick = function(event) {{
-            const helpModal = document.getElementById('helpModal');
-            const lightboxModal = document.getElementById('lightbox');
-            if (event.target == helpModal) {{
-                closeHelp();
-            }}
-            if (event.target == lightboxModal) {{
-                closeLightbox();
-            }}
-        }}
-        
-        // Lightbox functionality
-        let lightboxItems = [];
-        let currentLightboxIndex = 0;
-        let galleryAssets = {{}};
-        let galleryVideos = [];
-        
-        function openLightbox(src, caption, type = 'image', galleryId = null) {{
-            const lightbox = document.getElementById('lightbox');
-            const img = document.getElementById('lightbox-img');
-            const video = document.getElementById('lightbox-video');
-            const captionEl = document.getElementById('lightbox-caption');
-            
-            // Get items from global gallery arrays
-            if (galleryId && galleryAssets[galleryId]) {{
-                lightboxItems = galleryAssets[galleryId];
-            }} else if (galleryId === 'videos') {{
-                lightboxItems = galleryVideos;
-            }} else {{
-                lightboxItems = [{{src, caption, type}}];
+                return listHtml;
             }}
             
-            currentLightboxIndex = lightboxItems.findIndex(item => item.src === src);
-            if (currentLightboxIndex === -1) currentLightboxIndex = 0;
-            
-            showLightboxItem();
-            lightbox.style.display = 'block';
-        }}
-        
-        function showLightboxItem() {{
-            if (!lightboxItems[currentLightboxIndex]) return;
-            
-            const item = lightboxItems[currentLightboxIndex];
-            const img = document.getElementById('lightbox-img');
-            const video = document.getElementById('lightbox-video');
-            const captionEl = document.getElementById('lightbox-caption');
-            
-            if (item.type === 'video') {{
-                img.style.display = 'none';
-                video.style.display = 'block';
-                video.src = item.src;
-            }} else {{
-                video.style.display = 'none';
-                img.style.display = 'block';
-                img.src = item.src;
-            }}
-            
-            // Update caption with name and prompt if available
-            let captionText = item.caption;
-            if (item.prompt) {{
-                captionText += ` | Prompt: ${{item.prompt}}`;
-            }}
-            captionEl.textContent = captionText;
-        }}
-        
-        function closeLightbox() {{
-            const lightbox = document.getElementById('lightbox');
-            const video = document.getElementById('lightbox-video');
-            lightbox.style.display = 'none';
-            video.pause();
-        }}
-        
-        function navigateLightbox(direction) {{
-            currentLightboxIndex += direction;
-            if (currentLightboxIndex < 0) currentLightboxIndex = lightboxItems.length - 1;
-            if (currentLightboxIndex >= lightboxItems.length) currentLightboxIndex = 0;
-            showLightboxItem();
-        }}
-        
-        // Keyboard navigation for lightbox
-        document.addEventListener('keydown', function(e) {{
-            const lightbox = document.getElementById('lightbox');
-            if (lightbox.style.display === 'block') {{
-                if (e.key === 'Escape') closeLightbox();
-                if (e.key === 'ArrowLeft') navigateLightbox(-1);
-                if (e.key === 'ArrowRight') navigateLightbox(1);
-            }}
-        }});
-
-        function formatCost(stats) {{
-            const P_GEM_IN = 3.50 / 1000000;
-            const P_GEM_OUT = 10.50 / 1000000;
-            const P_GEM_IMG = 0.04;
-            const P_REP_DEF = 0.08;
-            
-            let c_gem = (stats.gemini_text_input_tokens * P_GEM_IN) + 
-                        (stats.gemini_text_output_tokens * P_GEM_OUT) + 
-                        (stats.gemini_images_generated * P_GEM_IMG);
-            
-            let c_rep = 0;
-            let rep_html = '';
-            for (const [model, secs] of Object.entries(stats.replicate_seconds || {{}})) {{
-                let rate = P_REP_DEF;
-                if (model === 'Slideshow') rate = 0;
-                else if (model.includes('hailuo') || model.includes('omni')) rate = 0.05;
-                else if (model.includes('wan') || model.includes('kling') || model.includes('veo')) rate = 0.10;
-                let cost = secs * rate;
-                c_rep += cost;
-                rep_html += `<tr><td>${{model}}</td><td>${{secs.toFixed(1)}}s</td><td>$${{cost.toFixed(4)}}</td></tr>`;
-            }}
-            
-            let total = c_gem + c_rep;
-            
-            return `
-                <table class="cost-table">
-                    <tr><th>Item</th><th>Qty</th><th>Est. Cost</th></tr>
-                    <tr><td>Gemini Text</td><td>${{stats.gemini_text_input_tokens + stats.gemini_text_output_tokens}} toks</td><td>$${{(stats.gemini_text_input_tokens * P_GEM_IN + stats.gemini_text_output_tokens * P_GEM_OUT).toFixed(4)}}</td></tr>
-                    <tr><td>Gemini Images</td><td>${{stats.gemini_images_generated}}</td><td>$${{(stats.gemini_images_generated * P_GEM_IMG).toFixed(4)}}</td></tr>
-                    ${{rep_html}}
-                </table>
-                <div class="total-cost">Total: $${{total.toFixed(2)}}</div>
-            `;
-        }}
-
-        let globalData = {{}};
-
-        function copyData(key) {{
-            let data = null;
-            if (key === 'montage') data = globalData.montage;
-            if (key === 'style') data = globalData.style;
-            if (key === 'palette') data = globalData.palette;
-            if (key === 'costs') data = globalData.costs;
-            if (key === 'analysis') data = globalData.analysis;
-            if (key === 'prompts') data = globalData.prompts;
-            if (key === 'motion') data = globalData.motion;
-            
-            if (data) {{
-                const text = JSON.stringify(data, null, 2);
-                navigator.clipboard.writeText(text).then(() => {{
-                    alert("JSON copied to clipboard!");
-                }});
-            }}
+            html += buildList(data);
+            html += '</ul>';
+            container.innerHTML = html;
         }}
 
         function copyText(text) {{
             navigator.clipboard.writeText(text).then(() => {{
-                // Optional: visual feedback
+                console.log('Copied:', text);
             }});
         }}
 
-        function renderTimeline(montage, assets) {{
-            if (!montage) return;
-            if (typeof montage === 'string') {{
-                try {{ montage = JSON.parse(montage); }} catch(e) {{ return; }}
-            }}
-            if (!Array.isArray(montage) || montage.length === 0) return;
-            
-            const container = document.getElementById('timeline');
-            // Only clear if it contains loading placeholder
-            if (container.querySelector('.loading-placeholder')) container.innerHTML = '';
-            
-            // Store for re-rendering on zoom
-            lastMontage = montage;
-            lastAssets = assets;
-            renderTimeline();
-        }}
-        
-        let lastMontage = [];
-        let lastAssets = [];
-        let pixelsPerSecond = 50;
-        
-        // Initialize zoom listener
-        setTimeout(() => {{
-            const zoomSlider = document.getElementById('timeline-zoom');
-            if (zoomSlider) {{
-                zoomSlider.oninput = (e) => {{
-                    pixelsPerSecond = parseInt(e.target.value);
-                    renderTimeline();
-                }};
-            }}
-        }}, 1000);
-
-        function renderTimeline() {{
-            const montage = lastMontage;
-            const assets = lastAssets;
-            
-            if (!montage || montage.length === 0) return;
-            const container = document.getElementById('timeline');
-            if (container.querySelector('.loading-placeholder')) container.innerHTML = '';
-            
-            container.innerHTML = '';
-            
-            montage.forEach((seg, idx) => {{
-                const dur = seg.duration || 4;
-                const widthPx = dur * pixelsPerSecond;
-                
-                const div = document.createElement('div');
-                div.className = 'timeline-segment';
-                div.style.width = widthPx + 'px';
-                div.style.minWidth = widthPx + 'px'; // Enforce width
-                div.style.flexShrink = 0;
-                div.title = `Scene ${{idx}}: ${{seg.description}} (${{dur}}s)\nPrompt: ${{seg.video_trigger_prompt || 'Pending...'}}`;
-                
-                let imgUrl = '';
-                // Priority 1: Start Frame for this scene
-                const startFrame = assets.find(a => a.type === "Start Frame" && a.name === `Scene ${{idx}}`);
-                if (startFrame) {{
-                    imgUrl = sessionPath + startFrame.file;
-                }} 
-                // Priority 2: Explicitly assigned asset
-                else if (seg.assets && seg.assets.length > 0) {{
-                    const assetName = seg.assets[0];
-                    const assetObj = assets.find(a => a.name === assetName || a.name.includes(assetName));
-                    if (assetObj) imgUrl = sessionPath + assetObj.file;
-                }}
-                
-                if (imgUrl) {{
-                    const promptText = seg.video_trigger_prompt || seg.description || 'Scene ' + idx;
-                    div.innerHTML = `
-                        <img src="${{imgUrl}}">
-                        <div class="seg-label">Sc ${{idx}}</div>
-                        <div class="seg-time">${{dur}}s</div>
-                        <div class="seg-info">${{promptText.substring(0, 80)}}...</div>
-                    `;
-                    div.onclick = () => openLightbox(imgUrl, `Scene ${{idx}}: ${{seg.description || 'No description'}}`, 'image');
-                }} else {{
-                    div.innerHTML = `<div class="seg-label">Sc ${{idx}}</div><div class="seg-time">${{dur}}s</div>`;
-                    div.onclick = () => openLightbox(imgUrl, `Scene ${{idx}}: ${{seg.description || 'No description'}}`, 'image');
-                    div.style.background = `hsl(${{idx * 40}}, 50%, 30%)`;
-                }}
-                
-                container.appendChild(div);
-            }});
-        }}
-
-        function renderStyle(styleData) {{
-            if (!styleData || Object.keys(styleData).length === 0) return;
-            const container = document.getElementById('style-display');
-            if (container.querySelector('.loading-placeholder')) container.innerHTML = '';
-            
-            let html = '';
-            for (const [k, v] of Object.entries(styleData)) {{
-                if (typeof v === 'string') {{
-                    html += `<div class="kv-row"><div class="kv-key">${{k}}</div><div class="kv-val">${{v}}</div></div>`;
-                }}
-            }}
-            if (html && container.innerHTML !== html) container.innerHTML = html;
-        }}
-
-        function renderGenericText(data, elementId) {{
-            if (!data) return;
-            const container = document.getElementById(elementId);
-            if (container.querySelector('.loading-placeholder')) container.innerHTML = '';
-            
-            let html = '';
-            if (typeof data === 'object') {{
-                html = `<pre style="white-space: pre-wrap; font-family: Consolas, monospace; font-size: 0.8rem; color: #aaa;">${{JSON.stringify(data, null, 2)}}</pre>`;
-            }} else {{
-                html = `<div style="white-space: pre-wrap; font-family: 'Segoe UI', sans-serif; font-size: 0.9rem; color: #ccc;">${{data}}</div>`;
-            }}
-            
-            if (html && container.innerHTML !== html) container.innerHTML = html;
-        }}
-
-        function renderPalette(paletteData) {{
-            if (!paletteData || !paletteData.palette) return;
-            const container = document.getElementById('palette-display');
-            if (container.querySelector('.loading-placeholder')) container.innerHTML = '';
-            
-            // Regex to parse: #HEX (Annotation)
-            const regex = /#([0-9A-Fa-f]{6})(.*)/;
-            
-            const html = paletteData.palette.map(c => {{
-                let hex = c;
-                let annotation = "";
-                const match = c.match(regex);
-                if (match) {{
-                    hex = "#" + match[1];
-                    annotation = match[2].replace(/[()]/g, "").trim();
-                }}
-                
-                return `
-                <div class="palette-item" onclick="copyText('${{hex}}')" title="Click to Copy Hex">
-                    <div class="palette-swatch" style="background:${{hex}}"></div>
-                    <div class="palette-hex">${{hex}}</div>
-                    <div class="palette-info">${{annotation}}</div>
-                </div>`;
-            }}).join('');
-            
-            if (html && container.innerHTML !== html) container.innerHTML = html;
-        }}
-
-        function receiveData(data) {{
-            globalData = data;
-            document.getElementById('status').innerText = data.status;
-            document.getElementById('progress').style.width = data.progress + '%';
-            document.getElementById('progress-text').innerText = data.progress + '%';
-            
-            const logBox = document.getElementById('logs');
-            if (data.logs.length > logBox.childElementCount) {{
-                 logBox.innerHTML = data.logs.map(l => `<div class="log-entry">${{l}}</div>`).join('');
-                 logBox.scrollTop = logBox.scrollHeight;
-            }}
-            
-            document.getElementById('costs').innerHTML = formatCost(data.costs);
-            
-            // Dynamic Assets Categories
-            const assetsContainer = document.getElementById('dynamic-assets-container');
-            // Group assets by type
-            const assetsByType = {{}};
-            data.assets.forEach(a => {{
-                const type = a.type || "Other";
-                if (!assetsByType[type]) assetsByType[type] = [];
-                assetsByType[type].push(a);
-            }});
-            
-            // If no assets yet, show placeholder in default container if it exists, or just clear
-            if (Object.keys(assetsByType).length === 0) {{
-                assetsContainer.innerHTML = `
-                <div class="card">
-                    <button class="help-btn" onclick="showHelp('assets')">?</button>
-                    <h3>Generated Assets</h3>
-                    <div class="gallery"></div>
-                </div>`;
-            }} else {{
-                // Re-build asset cards if number of categories changed or just update content
-                // For simplicity, we rebuild the HTML string and update if different
-                let newHtml = '';
-                for (const [type, list] of Object.entries(assetsByType)) {{
-                    // Store in global array for lightbox
-                    galleryAssets[type] = list.map(a => ({{
-                        src: sessionPath + a.file, 
-                        caption: `${{a.name}} (${{type}})`,
-                        prompt: a.prompt || '',
-                        type: 'image'
-                    }}));
-                    
-                    const itemsHtml = list.map((a, idx) => `
-                        <div class="gallery-item" onclick="openLightbox('${{sessionPath + a.file}}', '${{a.name}} (${{type}})', 'image', '${{type}}')" title="Click to view full size">
-                            <img src="${{sessionPath + a.file}}" loading="lazy">
-                            <div class="badge">${{type}}</div>
-                            <div class="label">${{a.name}}</div>
-                        </div>
-                    `).join('');
-                    
-                    newHtml += `
-                    <div class="card">
-                        <button class="help-btn" onclick="showHelp('assets')">?</button>
-                        <h3>${{type}}s</h3>
-                        <div class="gallery">${{itemsHtml}}</div>
-                    </div>`;
-                }}
-                if (assetsContainer.innerHTML !== newHtml) assetsContainer.innerHTML = newHtml;
-            }}
-            
-            // Videos with Download and Lightbox
-            galleryVideos = data.videos.map(v => ({{
-                src: sessionPath + v.file, 
-                caption: `Segment ${{v.index}}`,
-                prompt: v.prompt || '',
-                type: 'video'
-            }}));
-            
-            const vidsHtml = data.videos.map((v, idx) => `
-                <div class="gallery-item" onclick="openLightbox('${{sessionPath + v.file}}', 'Segment ${{v.index}}', 'video', 'videos')" title="Click to view full screen">
-                    <video src="${{sessionPath + v.file}}" preload="metadata"></video>
-                    <div class="badge">Seg ${{v.index}}</div>
-                    <div class="label">Segment ${{v.index}}</div>
-                    <a href="${{sessionPath + v.file}}" download class="download-icon" style="position:absolute; top:5px; right:5px; padding:5px; font-size:1rem; z-index:100;" title="Download" onclick="event.stopPropagation();">⬇️</a>
-                </div>
-            `).join('');
-            if (document.getElementById('videos-gallery').innerHTML !== vidsHtml)
-                document.getElementById('videos-gallery').innerHTML = vidsHtml;
-
-            // Final Video
-            if (data.final_video) {{
-                const vidBox = document.getElementById('final-video-box');
-                if (vidBox.querySelector('.loading-placeholder')) {{
-                    vidBox.innerHTML = `<video src="${{sessionPath + data.final_video}}" controls autoplay loop></video>`;
-                }}
-                
-                // Update download button
-                const btnVideo = document.getElementById('btn-dl-video');
-                if (btnVideo) {{
-                    btnVideo.href = sessionPath + data.final_video;
-                    btnVideo.classList.remove('disabled');
-                    btnVideo.download = data.final_video; // Suggest filename
-                }}
-            }}
-
-            // EDL Button
-            if (data.edl_file) {{
-                const btn = document.getElementById('btn-dl-edl');
-                btn.href = sessionPath + data.edl_file;
-                btn.classList.remove('disabled');
-            }}
-
-            renderTimeline(data.montage, data.assets);
-            renderStyle(data.style);
-            renderPalette(data.palette);
-            renderGenericText(data.analysis, 'analysis-display');
-            renderGenericText(data.narrative, 'narrative-display');
-            renderGenericText(data.prompts, 'prompts-display');
-            renderGenericText(data.motion, 'motion-display');
-        }}
-
-        function poll() {{
+        // --- Main Update Loop ---
+        function updateStatus() {{
             const script = document.createElement('script');
-            script.src = jsPath + '?t=' + Date.now();
-            document.body.appendChild(script);
+            script.src = jsPath + '?t=' + new Date().getTime();
+            
             script.onload = () => {{
-                document.body.removeChild(script);
+                if (window.statusData) {{
+                    currentData = window.statusData;
+                    renderUI(window.statusData);
+                }}
+                // Clean up
+                try {{ document.body.removeChild(script); }} catch(e) {{}}
             }};
+            
             script.onerror = () => {{
-                console.log("Polling error (file might not exist yet)");
-                document.body.removeChild(script);
+                console.log("Waiting for data... (file might not exist yet)");
+                try {{ document.body.removeChild(script); }} catch(e) {{}}
             }};
+            
+            document.body.appendChild(script);
+        }}
+
+        function renderUI(data) {{
+            // 1. Status Bar
+            const statusEl = document.getElementById('status');
+            if(statusEl) statusEl.textContent = data.status || 'Idle';
+            
+            const progEl = document.getElementById('progress');
+            if(progEl) progEl.style.width = (data.progress || 0) + '%';
+            
+            const progText = document.getElementById('progress-text');
+            if(progText) progText.textContent = (data.progress || 0) + '%';
+            
+            if (data.done || data.error) {{
+                const btnCancel = document.getElementById('btn-cancel');
+                if(btnCancel) btnCancel.classList.add('hidden');
+            }}
+
+            // 2. Active Stage Highlighting
+            document.querySelectorAll('.card').forEach(el => el.classList.remove('active-stage'));
+            const stageMap = {{
+                'Stage 1': 'card-s1',
+                'Stage 2': 'card-s2',
+                'Stage 3': 'card-s3',
+                'Stage 4': 'card-s3-palette',
+                'Stage 5': 'card-assets',
+                'Stage 6': 'card-timeline',
+                'Stage 7': 'card-s7',
+                'Stage 8': 'card-s8',
+                'Stage 9': 'card-timeline',
+                'Stage 10': 'card-s11',
+                'Stage 11': 'card-s11'
+            }};
+            
+            const statusText = data.status || "";
+            for (const [key, id] of Object.entries(stageMap)) {{
+                if (statusText.includes(key)) {{
+                    const el = document.getElementById(id);
+                    if (el) el.classList.add('active-stage');
+                    break;
+                }}
+            }}
+
+            // 3. Render Data Sections
+            renderInteractiveJson(data.analysis, 'analysis-display');
+            renderInteractiveJson(data.style, 'style-display');
+            renderInteractiveJson(data.narrative, 'narrative-display');
+            renderInteractiveJson(data.prompts, 'prompts-display');
+            renderInteractiveJson(data.motion, 'motion-display');
+            
+            // 4. Palette
+            if (data.palette) {{
+                const pContainer = document.getElementById('palette-display');
+                if(pContainer) {{
+                    let pHtml = '';
+                    if (data.palette.colors) {{
+                        data.palette.colors.forEach(c => {{
+                            pHtml += `<div class="palette-item" onclick="copyText('${{c.hex}}')">
+                                <div class="palette-swatch" style="background-color: ${{c.hex}}"></div>
+                                <div class="palette-hex">${{c.hex}}</div>
+                                <div class="palette-info">${{c.description || ''}}</div>
+                            </div>`;
+                        }});
+                    }}
+                    pContainer.innerHTML = pHtml || '<div style="padding:10px; color:#666;">No palette data</div>';
+                }}
+            }}
+
+            // 5. Timeline
+            renderTimeline(data);
+
+            // 6. Galleries
+            renderGallery(data.assets, 'assets-gallery', 'asset');
+            renderGallery(data.videos, 'videos-gallery', 'video');
+            
+            // 7. Final Video
+            if (data.final_video) {{
+                const vContainer = document.getElementById('final-video-box');
+                if (vContainer && !vContainer.querySelector('video')) {{
+                    vContainer.innerHTML = `<video controls src="${{data.final_video}}" poster="${{data.final_poster || ''}}" style="width:100%"></video>`;
+                    const btn = document.getElementById('btn-dl-video');
+                    if(btn) {{
+                        btn.href = data.final_video;
+                        btn.classList.remove('disabled');
+                    }}
+                }}
+            }}
+
+            // 8. Logs
+            if (data.logs) {{
+                const logBox = document.getElementById('logs');
+                if(logBox) {{
+                    logBox.innerHTML = data.logs.map(l => `<div class="log-entry">${{l}}</div>`).join('');
+                    requestAnimationFrame(() => {{
+                        logBox.scrollTop = logBox.scrollHeight;
+                    }});
+                }}
+            }}
+            
+            // 9. Costs
+            if (data.cost) {{
+                const costsEl = document.getElementById('costs');
+                if(costsEl) {{
+                    costsEl.innerHTML = `
+                        <table class="cost-table">
+                            <tr><th>Model</th><th>Count</th><th>Cost</th></tr>
+                            ${{Object.entries(data.cost.breakdown || {{}}).map(([k, v]) => `<tr><td>${{k}}</td><td>${{v.count}}</td><td>$${{v.cost.toFixed(4)}}</td></tr>`).join('')}}
+                        </table>
+                        <div class="total-cost">Total: $${{data.cost.total.toFixed(4)}}</div>
+                    `;
+                }}
+            }}
+        }}
+
+        function renderTimeline(data) {{
+            const tContainer = document.getElementById('timeline');
+            if(!tContainer) return;
+            
+            const scenes = data.montage || data.prompts || [];
+            if (!scenes || scenes.length === 0) return;
+
+            let html = '';
+            const zoomEl = document.getElementById('timeline-zoom');
+            const zoom = zoomEl ? zoomEl.value : 50;
+            
+            scenes.forEach((scene, idx) => {{
+                const duration = scene.duration || 5;
+                const width = duration * (zoom / 5); 
+                
+                const img = scene.image_file || scene.image || '';
+                const label = `Scene ${{idx + 1}}`;
+                const time = `${{duration}}s`;
+                const desc = scene.description || scene.visual || "No description";
+
+                html += `<div class="timeline-segment" style="width: ${{width}}px; flex-shrink: 0;" onclick="openLightbox('timeline', ${{idx}})">
+                    ${{img ? `<img src="${{img}}" loading="lazy">` : '<div style="width:100%;height:100%;background:#333;"></div>'}}
+                    <div class="seg-label">${{label}}</div>
+                    <div class="seg-time">${{time}}</div>
+                    <div class="seg-info">${{desc}}</div>
+                </div>`;
+            }});
+            tContainer.innerHTML = html;
+        }}
+
+        function renderGallery(items, containerId, type) {{
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            if (!items || items.length === 0) return;
+            
+            if (container.children.length === items.length) return;
+
+            let html = '';
+            items.forEach((item, idx) => {{
+                const src = item.file || item.url;
+                const thumb = item.thumbnail || src;
+                const label = item.name || `Item ${{idx+1}}`;
+                
+                html += `<div class="gallery-item" onclick="openLightbox('${{type}}', ${{idx}})">
+                    ${{type === 'video' || src.endsWith('.mp4') 
+                        ? `<video src="${{src}}" muted onmouseover="this.play()" onmouseout="this.pause();this.currentTime=0;"></video>`
+                        : `<img src="${{thumb}}" loading="lazy">`
+                    }}
+                    <div class="badge">${{type.toUpperCase()}}</div>
+                    <div class="label">${{label}}</div>
+                    <div class="overlay">
+                        <a href="${{src}}" download class="download-icon" onclick="event.stopPropagation()">⬇</a>
+                    </div>
+                </div>`;
+            }});
+            container.innerHTML = html;
+        }}
+
+        // --- Lightbox ---
+        function openLightbox(context, index) {{
+            const lightbox = document.getElementById('lightbox');
+            
+            // Collect items
+            if (context === 'timeline') {{
+                galleryItems = (currentData.montage || currentData.prompts || []).map(s => ({{
+                    src: s.image_file || s.image,
+                    type: 'image',
+                    caption: s.visual || s.description
+                }}));
+            }} else if (context === 'asset') {{
+                galleryItems = (currentData.assets || []).map(a => ({{
+                    src: a.file,
+                    type: 'image',
+                    caption: a.name
+                }}));
+            }} else if (context === 'video') {{
+                galleryItems = (currentData.videos || []).map(v => ({{
+                    src: v.file,
+                    type: 'video',
+                    caption: v.name
+                }}));
+            }}
+
+            currentSlideIndex = index;
+            showSlide(index);
+            lightbox.style.display = 'block';
+        }}
+
+        function showSlide(index) {{
+            if (index < 0) index = galleryItems.length - 1;
+            if (index >= galleryItems.length) index = 0;
+            currentSlideIndex = index;
+            
+            const item = galleryItems[index];
+            const content = document.getElementById('lightbox-content');
+            const caption = document.getElementById('lightbox-caption');
+            
+            if (item.type === 'video' || item.src.endsWith('.mp4')) {{
+                content.innerHTML = `<video src="${{item.src}}" controls autoplay style="max-width:100%; max-height:90vh;"></video>`;
+            }} else {{
+                content.innerHTML = `<img src="${{item.src}}" style="max-width:100%; max-height:90vh;">`;
+            }}
+            caption.textContent = `${{index + 1}}/${{galleryItems.length}}: ${{item.caption || ''}}`;
+        }}
+
+        function changeSlide(n, event) {{
+            if(event) event.stopPropagation();
+            showSlide(currentSlideIndex + n);
+        }}
+
+        function closeLightbox(event) {{
+            if (event.target.id === 'lightbox' || event.target.classList.contains('lightbox-close')) {{
+                document.getElementById('lightbox').style.display = 'none';
+                document.getElementById('lightbox-content').innerHTML = '';
+            }}
         }}
         
-        setInterval(poll, 2000);
-        poll();
+        function showHelp(section) {{
+            const modal = document.getElementById('helpModal');
+            const title = document.getElementById('helpTitle');
+            const content = document.getElementById('helpContent');
+            
+            const helpData = {{
+                'analysis': 'Stage 1: Gemini analyzes the audio file...',
+                'style': 'Stage 2: Visual style definition...',
+                'narrative': 'Stage 3: Narrative structure...',
+                'palette': 'Stage 3: Color palette...',
+                'prompts': 'Stage 7: Image prompts...',
+                'motion': 'Stage 8: Motion instructions...',
+                'timeline': 'Timeline of scenes...',
+                'assets': 'Generated assets...',
+                'segments': 'Video segments...',
+                'final_video': 'Final stitched video...',
+                'logs': 'Process logs...'
+            }};
+            
+            title.textContent = section.charAt(0).toUpperCase() + section.slice(1) + ' Help';
+            content.textContent = helpData[section] || 'No help available.';
+            modal.style.display = 'block';
+        }}
+        
+        function closeHelp() {{
+            document.getElementById('helpModal').style.display = 'none';
+        }}
+
+        document.addEventListener('keydown', function(e) {{
+            if (document.getElementById('lightbox').style.display === 'block') {{
+                if (e.key === 'ArrowLeft') changeSlide(-1);
+                if (e.key === 'ArrowRight') changeSlide(1);
+                if (e.key === 'Escape') document.getElementById('lightbox').style.display = 'none';
+            }}
+        }});
+
+        // Init
+        setInterval(updateStatus, 2000);
+        updateStatus();
     </script>
 </body>
 </html>
-        """
-        
+"""        
         try:
             with open(report_path, "w", encoding="utf-8") as f: f.write(html_content)
             print(f"[SceneGen] Created report at: {report_path}")
@@ -1157,8 +1011,16 @@ class SceneGenNode:
             # No need to update report on every token count, just at key stages
 
         # --- Setup ---
-        model_text = genai.GenerativeModel(model_text_name)
-        model_image_gen = genai.GenerativeModel(model_image_name)
+        # Configure safety settings to avoid false positives (PROHIBITED_CONTENT)
+        safety_settings = [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+        ]
+        
+        model_text = genai.GenerativeModel(model_text_name, safety_settings=safety_settings)
+        model_image_gen = genai.GenerativeModel(model_image_name, safety_settings=safety_settings)
         
         # Save original audio
         original_audio_path = os.path.join(session_dir, "original_audio.wav")
@@ -1196,14 +1058,54 @@ class SceneGenNode:
         update_report("Stage 1: Analyzing Audio...", 5, "Sending audio to Gemini for analysis...")
         print("[SceneGen] Stage 1: Audio Analysis...")
         prompt_s1 = f"""
-        Analyze this audio file (Lyrics, Rhythm, Mood, Genre). 
-        Instruction: "{instruction}"
-        Return a JSON object with:
-        - "genre": Music genre.
-        - "characteristics": Key musical characteristics.
-        - "dramaturgy": Key moments of drama/dynamics changes (time and description).
-        - "lyrics": Full lyrics with word-alignment (if applicable).
-        - "structure": Proposed structure for the video (Intro, Verse, Chorus, etc.) with timestamps.
+        CRITICAL TASK: Perform ULTRA-PRECISE audio analysis. This data will be used for exact video montage synchronization.
+        
+        Audio Duration: {total_duration_sec:.2f} seconds
+        User Instruction: "{instruction}"
+        
+        REQUIREMENTS (ALL MANDATORY):
+        
+        1. **WORD-LEVEL LYRICS ANALYSIS** (if vocals present):
+           - Transcribe ALL lyrics with EXACT timestamps for EACH word or short phrase
+           - Format: [{{"time_start": 0.5, "time_end": 1.2, "text": "word"}}, ...]
+           - If no lyrics: return empty array
+        
+        2. **BEAT/RHYTHM DETECTION**:
+           - Identify ALL major beats/drum hits with timestamps
+           - Format: [{{"time": 1.5, "strength": "strong/medium/weak", "type": "kick/snare/cymbal"}}, ...]
+           - Minimum 10 beat markers across the track
+        
+        3. **STRUCTURAL ANALYSIS**:
+           - Identify PRECISE sections (Intro, Verse, Chorus, Bridge, Outro, etc.)
+           - EACH section MUST have exact start/end timestamps
+           - Format: [{{"name": "Intro", "start": 0.0, "end": 8.5, "description": "..."}}, ...]
+           - Sections MUST cover the ENTIRE {total_duration_sec:.2f}s duration with NO GAPS
+        
+        4. **DRAMATURGY/DYNAMICS**:
+           - Key moments of energy changes, emotional shifts
+           - Format: [{{"time": 45.2, "event": "Build-up starts", "intensity": 7}}, ...]
+        
+        5. **METADATA**:
+           - "genre": Music genre
+           - "bpm": Estimated BPM (beats per minute)
+           - "key": Musical key (if detectable)
+           - "mood": Overall emotional tone
+           - "characteristics": List of key musical traits
+        
+        Return VALID JSON:
+        {{
+            "genre": "...",
+            "bpm": 120,
+            "key": "C major",
+            "mood": "...",
+            "characteristics": ["...", "..."],
+            "lyrics_timestamped": [{{"time_start": 0.0, "time_end": 0.5, "text": "..."}}],
+            "beats": [{{"time": 0.5, "strength": "strong", "type": "kick"}}],
+            "structure": [{{"name": "Intro", "start": 0.0, "end": 8.0, "description": "..."}}],
+            "dramaturgy": [{{"time": 10.0, "event": "...", "intensity": 5}}]
+        }}
+        
+        CRITICAL: Ensure structure sections cover EXACTLY 0.00s to {total_duration_sec:.2f}s with NO overlap or gaps.
         """
         # Note: We can't easily track input tokens for audio files without API metadata, 
         # but we can track the text prompt part.
@@ -1214,7 +1116,11 @@ class SceneGenNode:
         track_text("", debug_s1)
         track_text("", debug_s1)
         with open(os.path.join(session_dir, "stage1_analysis.txt"), "w", encoding="utf-8") as f: f.write(debug_s1)
-        report_state["analysis"] = debug_s1
+        try:
+            report_state["analysis"] = json.loads(self._clean_json(debug_s1))
+        except Exception as e:
+            print(f"[SceneGen] Stage 1 JSON Parse Warning: {e}")
+            report_state["analysis"] = debug_s1
         update_report("Stage 2: Defining Style...", 10, "Audio analysis complete.")
         
         # --- STAGE 2: Style Definition ---
@@ -1287,11 +1193,11 @@ class SceneGenNode:
         try:
             narrative_data = json.loads(self._clean_json(debug_s3_plan))
             planned_assets = narrative_data.get("assets", [])
-            report_state["narrative"] = narrative_data.get("storyline", "Narrative generated.")
+            report_state["narrative"] = narrative_data  # Store full object for interactive display
         except json.JSONDecodeError as e:
             print(f"[SceneGen] JSON Error in Stage 3: {e}")
             planned_assets = []
-            report_state["narrative"] = "Failed to parse narrative."
+            report_state["narrative"] = debug_s3_plan  # Fallback to raw text
             update_report("Stage 3 Warning", 17, "Failed to parse narrative JSON.")
 
         # --- STAGE 4: Color Palette ---
@@ -1397,7 +1303,8 @@ class SceneGenNode:
             elif "env" in cat or "location" in cat: 
                 suffix = "wide shot, empty scene, no people, architectural photography, detailed environment"
 
-            full_prompt = f"{style_instruction}. {desc}. {suffix}. {palette_data.get('lighting_mood', '')} --aspect {aspect_ratio}"
+            no_text = "NO TEXT, NO WORDS, NO LABELS on the image."
+            full_prompt = f"{no_text} {style_instruction}. {desc}. {suffix}. {palette_data.get('lighting_mood', '')} --aspect {aspect_ratio}"
             
             input_parts = [full_prompt]
             
@@ -1425,23 +1332,61 @@ class SceneGenNode:
                 # Skip actual image generation
                 print(f"  -> [Prompt Mode] Skipping generation for asset: {name}")
                 return (name, Image.new('RGB', (img_w, img_h)), cat)
+            # Optimize context images to reduce payload size (convert to JPEG)
+            def optimize_ref_image(img):
+                # Convert to RGB (remove alpha channel if present)
+                if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
+                    img = img.convert('RGB')
+                
+                # Save to buffer as JPEG
+                buf = io.BytesIO()
+                img.save(buf, format='JPEG', quality=85)
+                buf.seek(0)
+                return Image.open(buf)
 
-            try:
-                r = await model_image_gen.generate_content_async(input_parts)
-                if hasattr(r, 'parts'):
-                    for p in r.parts:
-                        if hasattr(p, 'inline_data'):
-                            img = Image.open(io.BytesIO(p.inline_data.data))
-                            img = img.resize((img_w, img_h)) # Ensure correct resolution
-                            if save_assets:
-                                fname = f"asset_{name}.png"
-                                img.save(os.path.join(session_dir, fname))
-                                usage_stats["generated_assets"].append({"name": name, "type": cat, "file": fname})
-                                report_state["assets"].append({"name": name, "type": cat, "file": fname, "prompt": full_prompt}) # Add to report state
-                            usage_stats["gemini_images_generated"] += 1 # Track image generation
-                            return (name, img, cat)
-            except Exception as e:
-                print(f"Asset Gen Error ({name}): {e}")
+            optimized_parts = []
+            for p in input_parts:
+                if isinstance(p, str):
+                    optimized_parts.append(p)
+                else:
+                    optimized_parts.append(optimize_ref_image(p))
+            input_parts = optimized_parts
+
+            # Retry logic with exponential backoff
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    t_start = time.time()
+                    if attempt == 0:
+                        img_count = sum(1 for p in input_parts if not isinstance(p, str))
+                        print(f"[SceneGen] Debug Asset {name}: Sending {img_count} context images.")
+
+                    # Add timeout - Increased to 90s
+                    r = await asyncio.wait_for(model_image_gen.generate_content_async(input_parts), timeout=90)
+                    
+                    dur = time.time() - t_start
+                    print(f"[SceneGen] Asset {name} Success in {dur:.1f}s")
+                    if hasattr(r, 'parts'):
+                        for p in r.parts:
+                            if hasattr(p, 'inline_data'):
+                                img = Image.open(io.BytesIO(p.inline_data.data))
+                                img = img.resize((img_w, img_h)) # Ensure correct resolution
+                                if save_assets:
+                                    fname = f"asset_{name}.png"
+                                    img.save(os.path.join(session_dir, fname))
+                                    usage_stats["generated_assets"].append({"name": name, "type": cat, "file": fname})
+                                    report_state["assets"].append({"name": name, "type": cat, "file": fname, "prompt": full_prompt}) # Add to report state
+                                usage_stats["gemini_images_generated"] += 1 # Track image generation
+                                return (name, img, cat)
+                except asyncio.TimeoutError:
+                    print(f"[SceneGen] WARNING: Asset {name} timed out (Attempt {attempt+1}/{max_retries}). Retrying...")
+                except Exception as e:
+                    print(f"[SceneGen] WARNING: Asset {name} Error: {e} (Attempt {attempt+1}/{max_retries}). Retrying...")
+                
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2 ** attempt)
+            
+            print(f"[SceneGen] ERROR: Asset {name} failed after {max_retries} attempts.")
             return (name, Image.new('RGB', (img_w, img_h)), cat)
 
         # Dependency Loop
@@ -1461,8 +1406,16 @@ class SceneGenNode:
                 ready = list(pending.keys()) # Force run remaining to avoid infinite loop
             
             print(f"Generating batch: {ready}")
-            # Run batch
-            batch_results = await asyncio.gather(*[gen_asset_task(pending[n]) for n in ready])
+            # Run batch with concurrency control
+            batch_results = []
+            ready_tasks = [gen_asset_task(pending[n]) for n in ready]
+            chunk_size = gemini_concurrency
+            
+            for i in range(0, len(ready_tasks), chunk_size):
+                chunk = ready_tasks[i:i+chunk_size]
+                print(f"  -> Asset Generation Chunk {i//chunk_size + 1}/{(len(ready_tasks) + chunk_size - 1)//chunk_size}...")
+                chunk_results = await asyncio.gather(*chunk)
+                batch_results.extend(chunk_results)
             
             for name, img, cat in batch_results:
                 asset_library[name] = img
@@ -1477,22 +1430,38 @@ class SceneGenNode:
             update_report(None, None, f"Generated batch of {len(ready)} assets.")
             
         available_assets_summary = ref_data + new_assets_list
+        
+        # Save Stage 5 summary
+        debug_s4 = json.dumps({
+            "reference_assets": ref_data,
+            "generated_assets": new_assets_list,
+            "total_assets": len(available_assets_summary)
+        }, indent=2)
+        with open(os.path.join(session_dir, "stage5_assets.json"), "w", encoding="utf-8") as f: f.write(debug_s4)
 
         # --- STAGE 6: Montage Line ---
         update_report("Stage 6: Creating Montage...", 35, "Structuring video timeline...")
         print("[SceneGen] Stage 6: Montage Line...")
         
         # Build model instruction based on availability
+        # Build model instruction based on availability
         if available_models:
             model_instruction = f"""
-        - Available Models: {json.dumps(available_models)}
-        For each scene, choose a model and duration:
-        - Wan/Kling: 5s or 10s.
-        - Hailuo: 6s or 10s (Note: 10s is 768p only).
-        - Veo: 4s, 6s, 8s.
-        - OmniHuman: Any.
-        - Specify "model": string (name from Available Models list)
-        - Specify "duration": float (Generation duration, e.g. 5.0)
+        - AVAILABLE VIDEO MODELS: {json.dumps(available_models)}
+        
+        CRITICAL INSTRUCTION FOR MODEL SELECTION:
+        You MUST use the EXACT string from the "AVAILABLE VIDEO MODELS" list above for the "model" field.
+        DO NOT use short names like "veo", "kling", "hailuo". Use the FULL string (e.g., "google/veo-3.1", "kwaivgi/kling-v2.5-turbo-pro").
+        
+        Duration Constraints:
+        - "wan-video/wan-2.5-i2v" / "wan-video/wan-2.5-i2v-fast": 5s.
+        - "kwaivgi/kling-v2.5-turbo-pro": 5s or 10s.
+        - "minimax/hailuo-2.3": 6s.
+        - "google/veo-3.1" / "google/veo-3.1-fast": 4s, 6s, or 8s.
+        
+        For each scene:
+        - "model": string (EXACTLY as listed above)
+        - "duration": float (e.g. 5.0, 6.0, 8.0)
             """
         else:
             model_instruction = """
@@ -1501,62 +1470,230 @@ class SceneGenNode:
         - Specify "duration": float (how long this image should be shown, e.g. 3.0-5.0s)
             """
         
+        # Create explicit list of asset names for Gemini
+        available_asset_names = [a["name"] for a in available_assets_summary]
+        
         prompt_s6 = f"""
-        Create a video montage JSON.
-        Context:
-        - Audio Duration: {total_duration_sec}s
-        - Analysis: {debug_s1}
+        CRITICAL TASK: Create PRECISE video montage synchronized with audio.
+        
+        CONTEXT:
+        - Audio Duration: {total_duration_sec:.2f} seconds (MUST BE FULLY COVERED)
+        - Audio Analysis (with timestamps): {debug_s1}
         - Style: {style_instruction}
         - Narrative: {report_state.get("narrative", "")}
-        - Assets Available: {json.dumps(available_assets_summary)}
-        - Dynamicity: {dynamicity} (0-1)
-        - Aggressive Edit: {aggressive_edit}
-        
-        INSTRUCTION:
-        Create a sequence of scenes that perfectly syncs with the audio.
-        Use the provided Audio File to feel the rhythm and cuts.
-        
-        If Aggressive Edit is True:
-        - Create fast cuts, sync tightly to beats.
-        - Use "trim_duration" to specify the exact part of the generated video to use (e.g. generate 5s, use 2s).
-        - High energy!
+        - Available Assets (USE EXACT NAMES): {json.dumps(available_asset_names)}
+        - Dynamicity: {dynamicity} (0=slow/calm, 1=fast/energetic)
+        - Aggressive Edit: {aggressive_edit} (if True: fast cuts, sync to beats)
+        - User Instruction: "{instruction}"
         
         {model_instruction}
         
-        Return JSON object with "scenes": list of objects:
-        - "description": Visual description of the scene action.
-        - "assets": List of asset names used (from Assets Available).
-        - "duration": float (Generation duration).
-        - "trim_duration": float (Actual duration in timeline, <= duration).
-        - "model": string (Model to use).
-        """
-        track_text(prompt_s6, "")
-        resp_s6 = await model_text.generate_content_async([prompt_s6, {"mime_type": "audio/wav", "data": audio_bytes}])
-        debug_s6 = resp_s6.text
-        track_text("", debug_s6)
-        with open(os.path.join(session_dir, "stage6_montage.json"), "w", encoding="utf-8") as f: f.write(debug_s6)
+        MONTAGE REQUIREMENTS (ALL MANDATORY):
         
-        try:
-            montage_data = json.loads(self._clean_json(debug_s6)).get("scenes", [])
-        except json.JSONDecodeError as e:
-            print(f"[SceneGen] JSON Error in Stage 6: {e}")
-            # Fallback: simple slideshow
-            montage_data = [{"description": "Scene 1", "assets": [], "duration": 5.0, "trim_duration": 5.0, "model": "Slideshow"}]
-            update_report("Stage 6 Warning", 40, "Failed to parse montage. Using fallback.")
+        1. **SYNCHRONIZATION WITH AUDIO TIMESTAMPS**:
+           - Use the timestamped lyrics, beats, and structure from Audio Analysis
+           - Align scene changes with:
+             * Lyric phrases (time_start/time_end)
+             * Beat markers (especially "strong" beats)
+             * Structural sections (Intro/Verse/Chorus transitions)
+           - Each scene should correspond to a specific moment in the audio
+        
+        2. **AGGRESSIVE EDIT MODE** (if enabled):
+           - Create SHORT, DYNAMIC cuts (0.5s - 3s per scene)
+           - Sync EVERY cut to a beat or word
+           - Use "trim_duration" SHORTER than "duration" (e.g., generate 5s, use 2s)
+           - High scene count (aim for 1 scene per 2-3 seconds of audio)
+        
+        3. **NORMAL EDIT MODE** (if aggressive_edit=False):
+           - Longer, cinematic shots (4s - 10s per scene)
+           - Scene changes at major structural points or lyric phrases
+           - trim_duration ≈ duration (or slightly less)
+        
+        4. **DURATION CONSTRAINTS** (CRITICAL):
+           - "duration" (generation length): MUST match model constraints:
+             * wan-video: 5s ONLY
+             * kling: 5s or 10s ONLY
+             * hailuo: 6s ONLY
+             * veo-3.1: 4s, 6s, or 8s ONLY
+             * Slideshow: any (3-10s)
+           - "trim_duration" (used in timeline): CAN be ANY value <= duration
+           - Example: {{"model": "google/veo-3.1", "duration": 6.0, "trim_duration": 2.5}}
+             → Generates 6s video, uses first 2.5s in montage
+        
+        5. **FULL AUDIO COVERAGE** (CRITICAL):
+           - The SUM of ALL "trim_duration" values MUST EQUAL {total_duration_sec:.2f}s
+           - NO GAPS, NO OVERLAP
+           - Verify: sum([scene["trim_duration"] for scene in scenes]) == {total_duration_sec:.2f}
+        
+        6. **SCENE CONTENT**:
+           - "description": Visual action description (what happens in THIS specific moment)
+           - "assets": List of asset names (from Available Assets)
+           - "sync_reference": Quote the lyric/beat/timestamp this scene aligns with
+           - "model": EXACT model string from AVAILABLE VIDEO MODELS
+           - "duration": Generation duration (respecting model constraints)
+           - "trim_duration": Final timeline duration (≤ duration)
+        
+        Return VALID JSON:
+        {{
+            "scenes": [
+                {{
+                    "description": "...",
+                    "assets": ["Asset_Name_1", "Asset_Name_2"],
+                    "sync_reference": "Lyrics 'word' at 12.5s" or "Beat at 3.2s" or "Chorus starts",
+                    "model": "google/veo-3.1",
+                    "duration": 6.0,
+                    "trim_duration": 2.5
+                }},
+                ...
+            ]
+        }}
+        
+        FINAL VERIFICATION BEFORE RETURNING:
+        - Count scenes
+        - Sum all trim_duration values
+        - Confirm sum == {total_duration_sec:.2f}s
+        - If not equal: ADD/REMOVE scenes or ADJUST trim_duration to match EXACTLY
+        """
+        # --- STAGE 6: Montage Generation with Feedback Loop ---
+        montage_data = []
+        max_montage_retries = 3
+        debug_s6 = ""
+        
+        for attempt in range(max_montage_retries):
+            full_prompt = prompt_s6
             
+            if attempt > 0:
+                # Calculate current duration from previous failed attempt
+                current_dur = sum(s.get("trim_duration", s.get("duration", 5.0)) for s in montage_data)
+                diff = total_duration_sec - current_dur
+                
+                print(f"[SceneGen] Montage duration mismatch ({current_dur:.2f}s vs {total_duration_sec:.2f}s). Retry {attempt}/{max_montage_retries} with feedback...")
+                
+                # Calculate timeline coverage
+                timeline_info = []
+                cumulative = 0.0
+                for i, s in enumerate(montage_data):
+                    dur = s.get("trim_duration", s.get("duration", 5.0))
+                    timeline_info.append(f"Scene {i}: {cumulative:.1f}s-{cumulative+dur:.1f}s ({dur:.1f}s)")
+                    cumulative += dur
+                
+                feedback_prompt = f"""
+                CRITICAL ERROR IN PREVIOUS ATTEMPT:
+                The generated montage duration was {current_dur:.2f}s, but the audio is {total_duration_sec:.2f}s.
+                Difference: {diff:+.2f}s ({'TOO SHORT - missing content' if diff > 0 else 'TOO LONG - remove content'}).
+                
+                Current Timeline Coverage:
+                {chr(10).join(timeline_info)}
+                Ends at: {cumulative:.2f}s (should end at {total_duration_sec:.2f}s)
+                
+                CORRECTION STRATEGY:
+                {f'''- You need to ADD {diff:.2f}s of content
+                - Option 1: Add new scenes to cover timestamps {cumulative:.1f}s - {total_duration_sec:.1f}s
+                - Option 2: Extend trim_duration of existing scenes (respecting duration limits)
+                - Check Audio Analysis for what happens in the missing time range''' if diff > 0 else f'''- You need to REMOVE {abs(diff):.2f}s of content
+                - Option 1: Remove some scenes
+                - Option 2: Shorten trim_duration of scenes (prioritize end scenes)
+                - Maintain sync with important moments (beats, lyrics)'''}
+                
+                MANDATORY: The total 'trim_duration' of all scenes MUST sum EXACTLY to {total_duration_sec:.2f}s.
+                
+                Return the FULL corrected JSON with all scenes.
+                """
+                full_prompt += "\n\n" + feedback_prompt
+
+            track_text(full_prompt, "")
+            
+            try:
+                resp_s6 = await model_text.generate_content_async([full_prompt, {"mime_type": "audio/wav", "data": audio_bytes}])
+                debug_s6 = resp_s6.text
+                track_text("", debug_s6)
+                
+                try:
+                    montage_data = json.loads(self._clean_json(debug_s6)).get("scenes", [])
+                except json.JSONDecodeError:
+                    print(f"[SceneGen] JSON Error in Stage 6 (Attempt {attempt})")
+                    if attempt == max_montage_retries - 1: raise
+                    continue
+
+                # Check duration
+                total_montage_duration = sum(s.get("trim_duration", s.get("duration", 5.0)) for s in montage_data)
+                
+                if abs(total_montage_duration - total_duration_sec) <= 2.0:
+                    print(f"[SceneGen] Montage duration accepted: {total_montage_duration:.2f}s (Audio: {total_duration_sec:.2f}s)")
+                    break # Success!
+                
+            except Exception as e:
+                print(f"[SceneGen] Stage 6 Error (Attempt {attempt}): {e}")
+                if attempt == max_montage_retries - 1:
+                    # Fallback: simple slideshow if all retries fail
+                    montage_data = [{"description": "Scene 1", "assets": [], "duration": 5.0, "trim_duration": 5.0, "model": "Slideshow"}]
+                    update_report("Stage 6 Warning", 40, "Failed to generate valid montage. Using fallback.")
+
+        with open(os.path.join(session_dir, "stage6_montage.json"), "w", encoding="utf-8") as f: f.write(debug_s6)
+            
+        # --- Time Normalization Logic ---
+        # Ensure total duration matches audio length exactly
+        total_montage_duration = sum(s.get("trim_duration", s.get("duration", 5.0)) for s in montage_data)
+        
+        if abs(total_montage_duration - total_duration_sec) > 0.5:
+            print(f"[SceneGen] Montage duration mismatch: {total_montage_duration:.2f}s vs Audio {total_duration_sec:.2f}s. Normalizing...")
+            
+            # Calculate scaling factor
+            scale_factor = total_duration_sec / total_montage_duration if total_montage_duration > 0 else 1
+            
+            current_total = 0.0
+            for i, scene in enumerate(montage_data):
+                orig_dur = scene.get("trim_duration", scene.get("duration", 5.0))
+                new_dur = orig_dur * scale_factor
+                
+                # Round to 2 decimal places for cleaner logs
+                new_dur = round(new_dur, 2)
+                
+                scene["trim_duration"] = new_dur
+                # Note: We don't change generation 'duration' (e.g. 5s) unless trim > duration
+                # But we must ensure generation is long enough
+                if new_dur > scene.get("duration", 5.0):
+                     scene["duration"] = math.ceil(new_dur) 
+                
+                current_total += new_dur
+                
+            # Fix rounding errors on the last scene
+            diff = total_duration_sec - current_total
+            if montage_data:
+                montage_data[-1]["trim_duration"] += diff
+                # Ensure generation duration covers it
+                if montage_data[-1]["trim_duration"] > montage_data[-1].get("duration", 5.0):
+                     montage_data[-1]["duration"] = math.ceil(montage_data[-1]["trim_duration"])
+            
+            print(f"[SceneGen] Normalized duration. New total: {sum(s['trim_duration'] for s in montage_data):.2f}s")
+
         report_state["montage"] = montage_data
+        debug_s5 = json.dumps(montage_data, indent=2)  # S5 = Montage
         update_report(None, None, f"Montage created: {len(montage_data)} scenes.")
+        
+        # Validate assets in montage
+        print("[SceneGen] Validating asset assignments...")
+        missing_assets = set()
+        for scene_idx, scene in enumerate(montage_data):
+            scene_assets = scene.get("assets", [])
+            for asset_name in scene_assets:
+                if asset_name not in asset_library and asset_name not in [a["name"] for a in ref_data]:
+                    missing_assets.add(asset_name)
+        
+        if missing_assets:
+            print(f"[SceneGen] WARNING: {len(missing_assets)} assets referenced but not found: {missing_assets}")
+            print(f"[SceneGen] Available assets: {list(asset_library.keys())}")
 
         # --- STAGE 7: Prompt Engineering (Batched) ---
         update_report("Stage 7: Writing Prompts...", 45, "Expanding scene details...")
         print("[SceneGen] Stage 7: Prompt Engineering (Batched)...")
-        detailed_scenes = []
         batch_size = 10
         
         # Prepare batches
         total_batches = (len(montage_data) + batch_size - 1) // batch_size
         
-        for b_idx in range(total_batches):
+        # Create async function for processing a single batch
+        async def process_batch(b_idx):
             start_i = b_idx * batch_size
             end_i = start_i + batch_size
             batch_scenes = montage_data[start_i:end_i]
@@ -1582,11 +1719,21 @@ class SceneGenNode:
             - "positive_prompt": A MASSIVE, DETAILED paragraph (50-100 words) describing the scene. 
               CRITICAL: You MUST explicitly describe the background/location using the specific Environment asset details to ensure continuity.
               Focus heavily on COMPOSITION, CAMERA ANGLE, LIGHTING, TEXTURE, and ATMOSPHERE. Make it visually rich and strictly adhering to the defined Style.
+              ⚠️ ABSOLUTELY CRITICAL: DO NOT include ANY text, words, captions, titles, subtitles, labels, or written elements in the visual description. The scene must be 100% visual only.
             - "video_trigger_prompt": Motion instruction for video generation.
-            - "negative_prompt": Standard negative prompt.
+            - "negative_prompt": Standard negative prompt including: text, words, letters, captions, titles, subtitles, writing, typography, labels.
             
             Return JSON object with "scenes": list of objects (same order as input).
             """
+            
+            if dialogues_gen:
+                prompt_s7 += """
+                DIALOGUE GENERATION ENABLED:
+                For scenes assigned to 'Veo 3.1', 'Veo 3.1 Fast', 'Wan 2.5', or 'Wan 2.5 Fast', you MAY generate a short dialogue line (max 7 seconds spoken) if it fits the narrative.
+                - Add field "dialogue": "Character Name: Spoken text" (or empty string if no dialogue).
+                - Keep it brief and impactful.
+                """
+            
             
             try:
                 track_text(prompt_s7, "")
@@ -1595,65 +1742,61 @@ class SceneGenNode:
                 batch_result = json.loads(self._clean_json(resp_s7.text)).get("scenes", [])
                 
                 # Merge details back into the original scene data for this batch
+                detailed_batch = []
                 for i, scene_detail in enumerate(batch_result):
                     if i < len(batch_scenes):
                         merged = {**batch_scenes[i], **scene_detail}
-                        detailed_scenes.append(merged)
+                        detailed_batch.append(merged)
+                return (b_idx, detailed_batch)
             except Exception as e:
                 print(f"  Batch {b_idx + 1} Error: {e}")
                 # On error, keep original batch scenes without updates
-                detailed_scenes.extend(batch_scenes)
+                return (b_idx, batch_scenes)
+        
+        # Process batches with concurrency control
+        batch_tasks = [process_batch(b_idx) for b_idx in range(total_batches)]
+        batch_results = []
+        chunk_size = max(1, gemini_concurrency // 2)  # Use half of concurrency for batches (each batch has ~10 scenes)
+        
+        for i in range(0, len(batch_tasks), chunk_size):
+            chunk = batch_tasks[i:i+chunk_size]
+            print(f"  -> Processing Batch Chunk {i//chunk_size + 1}/{(len(batch_tasks) + chunk_size - 1)//chunk_size}...")
+            chunk_results = await asyncio.gather(*chunk)
+            batch_results.extend(chunk_results)
+        
+        # Sort by batch index and flatten
+        batch_results.sort(key=lambda x: x[0])
+        detailed_scenes = []
+        for _, scenes in batch_results:
+            detailed_scenes.extend(scenes)
         
         final_scenes = detailed_scenes
-        debug_s7 = json.dumps(final_scenes, indent=2)
-        with open(os.path.join(session_dir, "stage7_prompts.json"), "w", encoding="utf-8") as f: f.write(debug_s7)
+        debug_s6 = json.dumps(final_scenes, indent=2)  # S6 = Prompts
+        with open(os.path.join(session_dir, "stage7_prompts.json"), "w", encoding="utf-8") as f: f.write(debug_s6)
         
         # Update report state with prompts and montage
-        report_state["prompts"] = debug_s7
+        report_state["prompts"] = debug_s6
         report_state["montage"] = final_scenes
         update_report("Stage 8: Generating Start Frames...", 50, "Scene prompts complete.")
 
         # --- STAGE 8: Image Generation (Start Frames) ---
-        update_report("Stage 8: Generating Start Frames...", 55, f"Generating {len(final_scenes)} start frames...")
-        print(f"[SceneGen] Stage 8: Generating Start Frames ({len(final_scenes)} scenes)...")
-        
-        async def gen_scene_image(idx, scene_data):
-            prompt = f"{scene_data.get('positive_prompt')} --aspect {aspect_ratio}"
-            
-            input_parts = [prompt]
-            
-            # Smart Asset Selection
-            refs = scene_data.get("asset_refs", [])
-            ref_img_found = False
-            attached_asset_names = []
-            
-            if refs:
-                for r_name in refs:
-                    r_name_clean = r_name.strip()
-                    found_key = None
-                    
-                    # 1. Exact Match
-                    if r_name_clean in asset_library:
-                        found_key = r_name_clean
-                    
-                    # 2. Partial Match (if LLM added extra text like "Gen_Env_0 (Dark)")
-                    if not found_key:
-                        for key in asset_library.keys():
-                            if key == r_name_clean.split(" ")[0]: # Check if first word matches key
-                                found_key = key
-                                break
         scene_images = []
         if render_mode == "Full Render":
             update_report("Stage 8: Generating Start Frames...", 55, f"Generating {len(final_scenes)} start frames...")
             print(f"[SceneGen] Stage 8: Generating Start Frames ({len(final_scenes)} scenes)...")
             
             async def gen_scene_image(idx, scene_data):
-                prompt = f"{scene_data.get('positive_prompt')} --aspect {aspect_ratio}"
+                # CRITICAL: NO TEXT ON IMAGES
+                # CRITICAL: NO TEXT ON IMAGES & NO COLLAGES
+                no_text_instruction = "ABSOLUTELY NO TEXT, NO WORDS, NO CAPTIONS, NO TITLES, NO LABELS on the image. Pure visual scene only."
+                ref_instruction = "The attached images are VISUAL REFERENCES ONLY (Character Sheets / Location Refs). DO NOT COPY their composition. DO NOT make a collage, split-screen, or grid. DO NOT show multiple views."
+                composition_instruction = "Create a SINGLE, CINEMATIC SHOT based on the text description. Integrate the referenced characters/objects naturally into a NEW scene with the described lighting and angle."
+                prompt = f"{no_text_instruction} {ref_instruction} {composition_instruction} {scene_data.get('positive_prompt')} --aspect {aspect_ratio}"
                 
                 input_parts = [prompt]
                 
-                # Smart Asset Selection
-                refs = scene_data.get("asset_refs", [])
+                # Smart Asset Selection - read both 'assets' and 'asset_refs' for compatibility
+                refs = scene_data.get("assets", scene_data.get("asset_refs", []))
                 ref_img_found = False
                 attached_asset_names = []
                 
@@ -1662,14 +1805,29 @@ class SceneGenNode:
                         r_name_clean = r_name.strip()
                         found_key = None
                         
-                        # 1. Exact Match
+                        # 1. Exact Match (case-sensitive)
                         if r_name_clean in asset_library:
                             found_key = r_name_clean
                         
-                        # 2. Partial Match (if LLM added extra text like "Gen_Env_0 (Dark)")
+                        # 2. Case-insensitive exact match
                         if not found_key:
                             for key in asset_library.keys():
-                                if key == r_name_clean.split(" ")[0]: # Check if first word matches key
+                                if key.lower() == r_name_clean.lower():
+                                    found_key = key
+                                    break
+                        
+                        # 3. Partial Match (if LLM added extra text like "Gen_Env_0 (Dark)")
+                        if not found_key:
+                            for key in asset_library.keys():
+                                if key in r_name_clean or r_name_clean in key:
+                                    found_key = key
+                                    break
+                        
+                        # 4. Fuzzy: Check if first word matches
+                        if not found_key:
+                            first_word = r_name_clean.split(" ")[0] if " " in r_name_clean else r_name_clean
+                            for key in asset_library.keys():
+                                if key.split("_")[0].lower() == first_word.lower():
                                     found_key = key
                                     break
                         
@@ -1677,40 +1835,129 @@ class SceneGenNode:
                             input_parts.append(asset_library[found_key])
                             attached_asset_names.append(found_key)
                             ref_img_found = True
-                            # We attach the first valid asset found to guide the scene. 
-                            # Attaching too many might confuse the composition.
-                            break 
+                            # Allow multiple assets (up to 5) to provide better context
+                            if len(input_parts) >= 6:  # 1 prompt + 5 images max
+                                break 
                 
-                # Fallback
+                # Fallback - log which assets were requested but not found
                 if not ref_img_found:
-                    if actor_imgs: 
-                        input_parts.append(actor_imgs[0])
-                        attached_asset_names.append("Fallback_Actor_0")
+                    if refs:
+                        print(f"[SceneGen] WARNING Scene {idx}: Assets {refs} not found in library. Using fallback.")
+                        print(f"[SceneGen] Available: {list(asset_library.keys())[:10]}...")
+                    
                     elif env_imgs: 
                         input_parts.append(env_imgs[0])
                         attached_asset_names.append("Fallback_Env_0")
                 
-                print(f"[SceneGen] Scene {idx}: Generating with assets {attached_asset_names}")
+                # Helper to optimize reference images (convert to JPEG to reduce upload size)
+                def optimize_ref_image(img):
+                    # Convert to RGB (remove alpha channel if present)
+                    if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
+                        img = img.convert('RGB')
+                    
+                    # Save to buffer as JPEG
+                    buf = io.BytesIO()
+                    img.save(buf, format='JPEG', quality=85)
+                    buf.seek(0)
+                    return Image.open(buf)
+
+                # Optimize images in input_parts
+                optimized_parts = []
+                for p in input_parts:
+                    if isinstance(p, str):
+                        optimized_parts.append(p)
+                    else:
+                        optimized_parts.append(optimize_ref_image(p))
                 
-                try:
-                    r = await model_image_gen.generate_content_async(input_parts)
-                    if hasattr(r, 'parts'):
-                        for p in r.parts:
-                            if hasattr(p, 'inline_data'):
-                                img = Image.open(io.BytesIO(p.inline_data.data))
-                                img = img.resize((img_w, img_h))
-                                if save_images:
-                                    fname = f"{prefix}_scene_{idx:03d}.png"
-                                    img.save(os.path.join(session_dir, fname))
-                                    usage_stats["generated_assets"].append({"name": f"Scene {idx}", "type": "Start Frame", "file": fname})
-                                    report_state["assets"].append({"name": f"Scene {idx}", "type": "Start Frame", "file": fname, "prompt": prompt})
-                                usage_stats["gemini_images_generated"] += 1 # Track image generation
-                                return img
-                except Exception as e:
-                    print(f"Scene Image Error {idx}: {e}")
+                input_parts = optimized_parts
+
+                
+                # Removed individual per-scene print - will show batch summary instead
+                
+                # Retry logic with exponential backoff
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        t_start = time.time()
+                        # Diagnostic log for first attempt
+                        if attempt == 0:
+                            img_count = sum(1 for p in input_parts if not isinstance(p, str))
+                            txt_len = sum(len(p) for p in input_parts if isinstance(p, str))
+                            print(f"[SceneGen] Debug Scene {idx}: Sending {img_count} images, {txt_len} chars prompt. Assets: {attached_asset_names}")
+                        
+                        # Add timeout to prevent infinite hanging - Increased to 90s
+                        r = await asyncio.wait_for(model_image_gen.generate_content_async(input_parts), timeout=90)
+                        
+                        dur = time.time() - t_start
+                        print(f"[SceneGen] Scene {idx} Success in {dur:.1f}s")
+                        if hasattr(r, 'parts'):
+                            for p in r.parts:
+                                if hasattr(p, 'inline_data'):
+                                    img = Image.open(io.BytesIO(p.inline_data.data))
+                                    img = img.resize((img_w, img_h))
+                                    if save_images:
+                                        fname = f"{prefix}_scene_{idx:03d}.png"
+                                        img.save(os.path.join(session_dir, fname))
+                                        usage_stats["generated_assets"].append({"name": f"Scene {idx}", "type": "Start Frame", "file": fname})
+                                        report_state["assets"].append({"name": f"Scene {idx}", "type": "Start Frame", "file": fname, "prompt": prompt})
+                                    usage_stats["gemini_images_generated"] += 1 # Track image generation
+                                    return img
+                    except asyncio.TimeoutError:
+                        print(f"[SceneGen] WARNING: Scene {idx} timed out (Attempt {attempt+1}/{max_retries}). Retrying...")
+                    except Exception as e:
+                        print(f"[SceneGen] WARNING: Scene {idx} Error: {e} (Attempt {attempt+1}/{max_retries}). Retrying...")
+                    
+                    if attempt < max_retries - 1:
+                        # Strategy for next attempt
+                        print(f"[SceneGen] Scene {idx}: Preparing retry strategy...")
+                        
+                        # Separate text and images
+                        current_imgs = [p for p in input_parts if not isinstance(p, str)]
+                        current_txt = next((p for p in input_parts if isinstance(p, str)), "")
+                        
+                        if current_imgs:
+                            # Attempt 2 (index 1): Resize images to 512px max dimension to reduce payload
+                            if attempt == 0:
+                                print("[SceneGen] Strategy: Resizing reference images to 512px...")
+                                new_imgs = []
+                                for img in current_imgs:
+                                    try:
+                                        img_copy = img.copy()
+                                        img_copy.thumbnail((512, 512))
+                                        new_imgs.append(img_copy)
+                                    except Exception as e:
+                                        print(f"[SceneGen] Resize warning: {e}")
+                                        new_imgs.append(img) # Keep original if resize fails
+                                input_parts = [current_txt] + new_imgs
+                                
+                            # Attempt 3 (index 2): Keep only the first image (primary asset)
+                            elif attempt == 1:
+                                if len(current_imgs) > 1:
+                                    print("[SceneGen] Strategy: Keeping only primary reference image...")
+                                    input_parts = [current_txt, current_imgs[0]]
+                                else:
+                                    print("[SceneGen] Strategy: Retrying with same inputs (transient error check)...")
+                        
+                        await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                
+                print(f"[SceneGen] ERROR: Scene {idx} failed after {max_retries} attempts. Using black placeholder.")
                 return Image.new('RGB', (img_w, img_h))
 
-            scene_images = await asyncio.gather(*[gen_scene_image(i, s) for i, s in enumerate(final_scenes)])
+            # Generate start frames with concurrency control
+            scene_images = []
+            tasks = [gen_scene_image(i, s) for i, s in enumerate(final_scenes)]
+            chunk_size = gemini_concurrency
+            
+            for i in range(0, len(tasks), chunk_size):
+                chunk = tasks[i:i+chunk_size]
+                print(f"  -> Generating Start Frames Batch {i//chunk_size + 1}/{(len(tasks) + chunk_size - 1)//chunk_size}...")
+                batch_results = await asyncio.gather(*chunk)
+                scene_images.extend(batch_results)
+                # Log batch completion with scene index range
+                start_idx = i
+                end_idx = min(i + len(chunk) - 1, len(tasks) - 1)
+                print(f"[SceneGen] Completed Start Frames Batch {i//chunk_size + 1}: scenes {start_idx}‑{end_idx}")
+            
             update_report(None, 65, "Start frames generated.")
         else:
             update_report("Stage 8: Skipped (Prompt Mode - Text Only)", 65, "Skipping start frame generation.")
@@ -1718,8 +1965,18 @@ class SceneGenNode:
             # Provide placeholder images for subsequent stages that might expect them
             scene_images = [Image.new('RGB', (img_w, img_h))] * len(final_scenes)
 
-        debug_s8 = f"Generated {len(scene_images)} start frames."
-        with open(os.path.join(session_dir, "stage8_generation_status.txt"), "w", encoding="utf-8") as f: f.write(debug_s8)
+        debug_s7 = f"Generated {len(scene_images)} start frames."  # S7 = Start Frames Info
+        with open(os.path.join(session_dir, "stage8_generation_status.txt"), "w", encoding="utf-8") as f: f.write(debug_s7)
+
+        # Add planned filenames to montage
+        for idx, scene in enumerate(final_scenes):
+            # Image filename (start frame)
+            scene["image_file"] = f"{prefix}_scene_{idx:03d}.png"
+            # Video filename (will be generated in Stage 11)
+            if save_segments:
+                scene["video_file"] = f"{prefix}_{idx:03d}.mp4"
+            else:
+                scene["video_file"] = f"seg_{idx:03d}.mp4"
 
         # --- STAGE 9: Vision-Aware Video Prompt Refinement ---
         update_report("Stage 9: Refining Motion...", 70, "Analyzing frames for motion prompts...")
@@ -1783,11 +2040,13 @@ class SceneGenNode:
             if new_prompt:
                 final_scenes[idx]["video_trigger_prompt"] = new_prompt
                 
-        debug_s9 = json.dumps([{"scene": i, "motion": p} for i, p in refined_results], indent=2) if refined_results else "[]"
-        with open(os.path.join(session_dir, "stage9_prompts_status.txt"), "w", encoding="utf-8") as f: f.write(debug_s9)
-        report_state["motion"] = debug_s9
+        debug_s8 = json.dumps([{"scene": i, "motion": p} for i, p in refined_results], indent=2) if refined_results else "[]"  # S8 = Motion Refinement
+        with open(os.path.join(session_dir, "stage9_prompts_status.txt"), "w", encoding="utf-8") as f: f.write(debug_s8)
+        report_state["motion"] = debug_s8
         # Update montage with new prompts
         report_state["montage"] = final_scenes
+        debug_s9 = json.dumps(final_scenes, indent=2)  # S9 = Timeline Data (final montage with all details)
+        with open(os.path.join(session_dir, "stage9_timeline.json"), "w", encoding="utf-8") as f: f.write(debug_s9)
         update_report("Stage 11: Audio Slicing...", 75, "Motion refinement complete.")
 
         # --- STAGE 10: Duration Verification & Audio Slicing ---
@@ -1798,9 +2057,40 @@ class SceneGenNode:
         for i, scene in enumerate(final_scenes):
             target_dur = float(scene.get("duration", 5))
             trim_dur = float(scene.get("trim_duration", target_dur))
-            if not aggressive_edit: trim_dur = target_dur # Safety fallback
             
-            model = scene.get("model", available_models[0] if available_models else "Slideshow")
+            # Dialogue Logic: If dialogue is present on a supported model, DO NOT TRIM aggressively
+            has_dialogue = bool(scene.get("dialogue", "")) and dialogues_gen
+            # Check if model supports dialogue (Veo, Wan)
+            raw_model = scene.get("model", "").lower()
+            is_dialogue_model = "veo" in raw_model or "wan" in raw_model
+            
+            if not aggressive_edit or (has_dialogue and is_dialogue_model): 
+                trim_dur = target_dur # Use full duration, do not trim
+            
+            # Quantize to nearest frame to ensure EDL/Video sync
+            frame_dur = 1.0 / fps
+            trim_dur = round(trim_dur / frame_dur) * frame_dur
+            
+            raw_model_name = scene.get("model", "")
+            model = available_models[0] if available_models else "Slideshow"
+            
+            # Validate and fix model name
+            if available_models:
+                if raw_model_name in available_models:
+                    model = raw_model_name
+                else:
+                    # Try fuzzy match
+                    found = False
+                    for av in available_models:
+                        if raw_model_name.lower() in av.lower() or av.lower() in raw_model_name.lower():
+                            model = av
+                            found = True
+                            print(f"[SceneGen] Fixed model name for Scene {i}: '{raw_model_name}' -> '{model}'")
+                            break
+                    if not found:
+                        print(f"[SceneGen] Warning: Model '{raw_model_name}' not available. Using fallback: '{model}'")
+            
+            scene["model"] = model # Update scene with correct model name
             
             # Snap logic
             gen_dur = target_dur
@@ -1939,8 +2229,33 @@ class SceneGenNode:
                     return (idx, local_path, fname, current_prompt)
                     
                 except Exception as e:
-                    print(f"Task {idx} Failed: {e}")
-                    return (idx, None, None, None)
+                    print(f"Task {idx} Failed: {e}. Creating fallback video...")
+                    try:
+                        # Fallback: Create video from start image
+                        if save_segments: 
+                            fname = f"{prefix}_{idx:03d}_fallback.mp4"
+                            local_path = os.path.join(session_dir, fname)
+                        else: 
+                            fname = f"seg_{idx:03d}_fallback.mp4"
+                            local_path = os.path.join(session_dir, fname)
+                        
+                        dur = task["trim_duration"]
+                        
+                        # ffmpeg command to create video from image
+                        cmd = [
+                            "ffmpeg", "-y", "-loop", "1", "-i", img_path, "-t", str(dur),
+                            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "24", 
+                            "-vf", f"scale={img_w}:{img_h}:force_original_aspect_ratio=decrease,pad={img_w}:{img_h}:(ow-iw)/2:(oh-ih)/2",
+                            "-an", local_path
+                        ]
+                        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                        
+                        print(f"Task {idx} Fallback created successfully.")
+                        return (idx, local_path, fname, "FALLBACK: " + task["prompt"])
+                        
+                    except Exception as e2:
+                        print(f"Task {idx} Fallback Failed: {e2}")
+                        return (idx, None, None, None)
                 finally:
                     try: os.unlink(img_path); os.unlink(aud_path)
                     except: pass
@@ -2150,7 +2465,7 @@ class SceneGenNode:
                     rec_out_sec = rec_in_sec + trim
                     
                     def sec_to_tc(s):
-                        frames = int(s * 24)
+                        frames = int(s * fps)
                         hh = frames // 86400
                         rem = frames % 86400
                         mm = rem // 3600
@@ -2288,9 +2603,13 @@ class SceneGenVideoPlayer:
         # To display video in ComfyUI, it needs to be in the output directory or accessible via URL.
         output_dir = folder_paths.get_output_directory()
         
+        # Normalize paths for comparison
+        video_path_norm = os.path.normpath(video_path)
+        output_dir_norm = os.path.normpath(output_dir)
+        
         # Check if path is absolute and inside output_dir
-        if os.path.isabs(video_path) and video_path.startswith(output_dir):
-            rel_path = os.path.relpath(video_path, output_dir)
+        if os.path.isabs(video_path_norm) and video_path_norm.startswith(output_dir_norm):
+            rel_path = os.path.relpath(video_path_norm, output_dir_norm)
             subfolder = os.path.dirname(rel_path)
             filename = os.path.basename(rel_path)
         else:
@@ -2404,7 +2723,7 @@ class SceneGenCostAnalyzer:
             <title>Scene Gen Report</title>
             <style>
                 body {{ font-family: 'Segoe UI', sans-serif; background: #1a1a1a; color: #e0e0e0; margin: 0; padding: 20px; }}
-                .container {{ max-width: 1000px; margin: 0 auto; background: #252525; border-radius: 15px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }}
+                .container {{ width: 95%; max-width: none; margin: 0 auto; background: #252525; border-radius: 15px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }}
                 .header {{ 
                     background: url('pablo-4k.jpeg') center/cover no-repeat; 
                     height: 250px; position: relative; 
@@ -2417,7 +2736,7 @@ class SceneGenCostAnalyzer:
                 
                 /* Tables */
                 table {{ width: 100%; border-collapse: collapse; margin-bottom: 20px; background: #2a2a2a; border-radius: 8px; overflow: hidden; }}
-                th, td {{ text-align: left; padding: 15px; border-bottom: 1px solid #333; }}
+                th, td {{ text-align: left; padding: 15px; border-bottom: 1px solid #333; word-break: normal; overflow-wrap: anywhere; }}
                 th {{ background: #333; color: #aaa; font-weight: 600; text-transform: uppercase; font-size: 0.85em; letter-spacing: 1px; }}
                 tr:last-child td {{ border-bottom: none; }}
                 

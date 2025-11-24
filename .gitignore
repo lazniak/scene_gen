@@ -11,6 +11,8 @@
 !.gitignore
 !pyproject.toml
 !LICENSE
+!js/
+!js/*.js
 
 # Keep .git directory (git handles this automatically usually, but good to be safe if I messed with *)
 !.git/
