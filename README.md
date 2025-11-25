@@ -7,12 +7,17 @@
 <a name="english"></a>
 ## 🇬🇧 English
 
-**Scene Gen** is a powerful custom node for ComfyUI that automates the creation of music videos and visual scenes directly from audio input. It leverages the power of **Google Gemini 3 Pro** for deep audio analysis, scriptwriting, and asset generation, and integrates with **Replicate** to generate high-quality video clips using state-of-the-art models like Wan, Kling, Hailuo, and Veo.
+**Scene Gen** is a powerful custom node for ComfyUI that automates the creation of music videos and visual scenes directly from audio input.
+
+[![Demo Video](https://img.youtube.com/vi/seNjjavfd7k/0.jpg)](https://youtu.be/seNjjavfd7k)
+
+It leverages the power of **Google Gemini 3 Pro** for deep audio analysis, scriptwriting, and asset generation, and integrates with **Replicate** to generate high-quality video clips using state-of-the-art models like Wan, Kling, Hailuo, and Veo.
 
 ### ✨ Key Features
 
 *   **🎵 Deep Audio Analysis**: Uses Gemini to analyze your audio's genre, mood, lyrics, and dramatic structure to perfectly sync visuals with the music.
 *   **🎨 Automated Art Direction**: Automatically generates a cohesive visual style, color palette, and lighting mood based on the track's vibe.
+*   **🌌 Diverse Styles**: Create anything from cinematic realism to [LoFi SciFi](https://www.youtube.com/shorts/8rwUUHLk-pc), anime, or abstract art.
 *   **🖼️ Asset & Character Generation**: Creates consistent environments, props, vehicle interiors, and characters (actors) before filming begins. Supports comprehensive character sheets and clean prop generation.
 *   **🎬 Intelligent Montage**: Constructs a video timeline (montage) that fits the song's duration, with cuts synchronized to beats and dramatic shifts.
 *   **🎥 Multi-Model Video Generation**: Supports a wide range of top-tier video models via Replicate:
@@ -23,6 +28,8 @@
     *   **OmniHuman**
 *   **🎞️ Auto-Editing**: Automatically stitches generated clips together and muxes them with your original audio.
 *   **📝 EDL Export**: Exports a CMX 3600 `.edl` file with audio tracks, allowing you to import the timeline into Premiere Pro or DaVinci Resolve for fine-tuning.
+    
+    ![EDL Export Workflow](edl_export.png)
 *   **🎛️ Granular Control**: Sliders for Creativity, Dynamicity, and Word Influence (Lyric literalism).
 
 ### 🛠️ Installation
@@ -93,6 +100,7 @@ Wykorzystuje moc **Google Gemini 3 Pro** do głębokiej analizy dźwięku, pisan
 
 *   **🎵 Głęboka Analiza Audio**: Używa Gemini do analizy gatunku, nastroju, tekstu piosenki i struktury dramatycznej, aby idealnie zsynchronizować obraz z muzyką.
 *   **🎨 Automatyczna Dyrekcja Artystyczna**: Samodzielnie definiuje spójny styl wizualny, paletę kolorów i oświetlenie na podstawie klimatu utworu.
+*   **🌌 Różnorodne Style**: Twórz wszystko, od kinowego realizmu po [LoFi SciFi](https://www.youtube.com/shorts/8rwUUHLk-pc), anime czy sztukę abstrakcyjną.
 *   **🖼️ Generowanie Zasobów**: Tworzy spójne środowiska, rekwizyty, wnętrza pojazdów i postacie (aktorów) przed rozpoczęciem "kręcenia". Obsługuje szczegółowe karty postaci i czyste generowanie rekwizytów.
 *   **🎬 Inteligentny Montaż**: Buduje oś czasu wideo (montaż) dopasowaną do długości utworu, z cięciami zsynchronizowanymi z rytmem i zmianami nastroju.
 *   **🎥 Obsługa Wielu Modeli Wideo**: Wspiera szeroką gamę topowych modeli poprzez Replicate:
@@ -103,6 +111,8 @@ Wykorzystuje moc **Google Gemini 3 Pro** do głębokiej analizy dźwięku, pisan
     *   **OmniHuman**
 *   **🎞️ Auto-Edycja**: Automatycznie łączy wygenerowane klipy i miksuje je z oryginalnym dźwiękiem.
 *   **📝 Eksport EDL**: Eksportuje plik `.edl` (CMX 3600) ze ścieżkami audio, umożliwiając import osi czasu do Premiere Pro lub DaVinci Resolve w celu dalszej edycji.
+    
+    ![EDL Export Workflow](edl_export.png)
 *   **🎛️ Precyzyjna Kontrola**: Suwaki do sterowania Kreatywnością, Dynamiką i Wpływem Słów (dosłowność tekstu).
 
 ### 🛠️ Instalacja
