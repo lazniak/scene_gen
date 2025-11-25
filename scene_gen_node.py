@@ -1365,10 +1365,14 @@ class SceneGenNode:
         REQUIREMENTS:
         - "assets": A list of ALL assets (both Reference and New).
           - "name": Unique ID. For references, use the EXACT name from the list above.
-          - "category": "Actor", "Prop", or "Location".
+          - "category": "Actor", "Prop", "Location", or "Vehicle Interior".
           - "description": Visual description WITH explicit mentions of related assets (see above).
           - "parent_asset": If this is a variant or depends on another asset, name the parent.
           - "is_reference": boolean (true if from reference list)
+        
+        NOTE ON VEHICLES:
+        - If the story involves travel inside a vehicle, define a "Vehicle Interior" asset (e.g., "Car_Interior", "Spaceship_Cockpit").
+        - This allows consistent framing for all shots inside that vehicle.
         
         Return JSON:
         {{
@@ -1455,6 +1459,8 @@ class SceneGenNode:
                 suffix = "character sheet, face close-up, side profile, full body shot, neutral background, isolated, high detail, concept art"
             elif "prop" in cat: 
                 suffix = "object sheet, multiple angles (front, side, top), isolated on white background, highly detailed, 3d render, NO HUMANS, NO HANDS, NO FACES, ONLY THE OBJECT"
+            elif "vehicle" in cat or "interior" in cat:
+                suffix = "interior view, dashboard visible, pov shot, wide angle, detailed car interior, no people, empty seats"
             elif "env" in cat or "location" in cat: 
                 suffix = "wide shot, empty scene, no people, architectural photography, detailed environment"
 
