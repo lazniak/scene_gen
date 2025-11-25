@@ -77,32 +77,13 @@ class SceneGenNode:
                 "audio_volume": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.1, "tooltip": "Volume level for the user input audio (1.0 = 100%)."}),
                 "video_volume": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.1, "tooltip": "Volume level for the generated video audio (1.0 = 100%)."}),
                 "normalize_audio": ("BOOLEAN", {"default": False, "tooltip": "If True, applies loudness normalization to the final mixed audio."}),
+                "use_raw_references": ("BOOLEAN", {"default": False, "tooltip": "If True, only generates assets that are NOT present in the provided reference images."}),
             },
             "optional": {
                 "reference_images": ("IMAGE", {"tooltip": "Optional images to use as references for style, characters, or environments."}),
             }
         }
 
-    RETURN_TYPES = (
-        "IMAGE", "IMAGE", "IMAGE", "IMAGE",
-        "STRING", "STRING", "STRING", "STRING", "STRING", "STRING", "STRING", "STRING", "STRING", "STRING", "STRING",
-        "STRING", "STRING"
-    )
-    RETURN_NAMES = (
-        "Environment Images", "Asset Images", "Actor Images", "Scene Start Frames",
-        "Analysis (S1)", "Style (S2)", "Palette (S3)", "Assets (S4)", "Montage (S5)", 
-        "Prompts (S6)", "Start Frames Info (S7)", "Motion Refinement (S8)", "Timeline Data (S9)", "Generation Status (S10)", "Stitching Info (S11)",
-        "Cost Data (JSON)", "Final Video Path"
-    )
-    FUNCTION = "process"
-    CATEGORY = "Scene Gen"
-
-    def process(self, audio, gemini_api_key, replicate_api_token, prompt_instruction, filename_prefix, fps, model_text, model_image, creativity, dynamicity, video_quality, aspect_ratio, resolution_multiplier, enable_prompt_expansion, save_segments, save_images, save_assets, gemini_concurrency, replicate_concurrency, use_wan_fast, use_wan_2_5, use_kling_turbo, use_omni_human, use_hailuo, use_hailuo_fast, use_veo_3_1, use_veo_3_1_fast, aggressive_edit, word_influence, save_edl, open_coffee_link, render_mode, dialogues_gen, open_report, mix_native_audio, audio_volume, video_volume, normalize_audio, reference_images=None):
-        print(f"\n[SceneGen] === Starting Iterative Process ===")
-        
-        if not gemini_api_key: raise ValueError("Gemini API Key is required.")
-        if not replicate_api_token: raise ValueError("Replicate API Token is required.")
-        
         os.environ["REPLICATE_API_TOKEN"] = replicate_api_token
         genai.configure(api_key=gemini_api_key)
 
@@ -1596,8 +1577,14 @@ class SceneGenNode:
 
         # Dependency Loop - SKIP REFERENCE ASSETS (already in asset_library)
         # Filter out assets that are references (already loaded in Stage 2.5)
-        assets_to_generate = [a for a in new_assets_list if not a.get("is_reference", False)]
-        assets_skipped = [a for a in new_assets_list if a.get("is_reference", False)]
+        if use_raw_references:
+             # If using raw references, we ONLY generate assets that are NOT in the library
+             assets_to_generate = [a for a in new_assets_list if a["name"] not in asset_library]
+             assets_skipped = [a for a in new_assets_list if a["name"] in asset_library]
+             print(f"[SceneGen] Stage 5 (Raw Refs Mode): Skipping {len(assets_skipped)} assets already in library.")
+        else:
+             assets_to_generate = [a for a in new_assets_list if not a.get("is_reference", False)]
+             assets_skipped = [a for a in new_assets_list if a.get("is_reference", False)]
         
         print(f"[SceneGen] Stage 5: {len(assets_to_generate)} assets to generate, {len(assets_skipped)} reference assets skipped.")
         
