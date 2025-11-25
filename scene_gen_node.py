@@ -1488,10 +1488,10 @@ class SceneGenNode:
                         # Prioritize props mentioned in description, but also include general props if space allows
                         is_relevant = existing_name.lower() in desc.lower() or any(word in desc.lower() for word in existing_name.lower().split('_'))
                         
-                        if is_relevant or len(input_parts) < 6: # Fill up to 5 refs (prompt + parent + 4 others)
+                        # Add ALL relevant props or any prop if it helps build context, relying on compression later
+                        if is_relevant or True: 
                              input_parts.append(existing_img)
                              context_assets_added.append(existing_name)
-                             if len(input_parts) >= 7: break  # Limit: prompt + parent + 5 context refs
             
             elif "location" in cat or "env" in cat:
                 # For Locations/Environments: Add ALL Actors and relevant Props to populate the scene
