@@ -572,12 +572,19 @@ class SceneGenNode:
             </div>
         </div>
         
-        <div id="dynamic-assets-container" class="grid">
-            <!-- Dynamic Asset Categories will be injected here -->
-            <div id="card-assets" class="card">
+        <div class="grid">
+            <!-- Generated Assets (Props, Characters, Environments) -->
+            <div id="card-assets-generated" class="card">
                 <button class="help-btn" onclick="showHelp('assets')">?</button>
-                <h3>Generated Assets</h3>
-                <div id="assets-gallery" class="gallery"></div>
+                <h3>Generated Assets (Props, Actors, Env)</h3>
+                <div id="assets-gallery-content" class="gallery"></div>
+            </div>
+
+            <!-- Generated Scenes (Start Frames) - Ordered by Timeline -->
+            <div id="card-scenes-generated" class="card">
+                <button class="help-btn" onclick="showHelp('scenes')">?</button>
+                <h3>Generated Scenes (Start Frames)</h3>
+                <div id="scenes-gallery-content" class="gallery"></div>
             </div>
         </div>
         
@@ -781,7 +788,25 @@ class SceneGenNode:
             renderInteractiveJson(data.palette, 'palette-display');
             
             // 4. Render Galleries
-            renderGallery(data.assets, 'assets-gallery', 'asset');
+            // 4. Render Galleries - Split into Assets and Scenes
+            if (data.assets) {{
+                // Filter Assets (Props, Actors, Env, etc.) - exclude 'Scene Start Frame'
+                const assetItems = data.assets.filter(a => !a.type.includes('Scene Start Frame'));
+                renderGallery(assetItems, 'assets-gallery-content', 'asset');
+
+                // Filter Scenes (Start Frames) and Sort by Name (assuming name contains index like 'Scene 01')
+                const sceneItems = data.assets.filter(a => a.type.includes('Scene Start Frame'));
+                // Sort scenes by name to ensure timeline order
+                sceneItems.sort((a, b) => {{
+                    const nameA = a.name.toLowerCase();
+                    const nameB = b.name.toLowerCase();
+                    if (nameA < nameB) return -1;
+                    if (nameA > nameB) return 1;
+                    return 0;
+                }});
+                renderGallery(sceneItems, 'scenes-gallery-content', 'scene');
+            }}
+            
             renderGallery(data.videos, 'videos-gallery', 'video');
             
             // 4.5. Render Final Video
