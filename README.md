@@ -13,7 +13,7 @@
 
 *   **🎵 Deep Audio Analysis**: Uses Gemini to analyze your audio's genre, mood, lyrics, and dramatic structure to perfectly sync visuals with the music.
 *   **🎨 Automated Art Direction**: Automatically generates a cohesive visual style, color palette, and lighting mood based on the track's vibe.
-*   **🖼️ Asset & Character Generation**: Creates consistent environments, props, and characters (actors) before filming begins.
+*   **🖼️ Asset & Character Generation**: Creates consistent environments, props, vehicle interiors, and characters (actors) before filming begins. Supports comprehensive character sheets and clean prop generation.
 *   **🎬 Intelligent Montage**: Constructs a video timeline (montage) that fits the song's duration, with cuts synchronized to beats and dramatic shifts.
 *   **🎥 Multi-Model Video Generation**: Supports a wide range of top-tier video models via Replicate:
     *   **Wan 2.5** (Standard & Fast)
@@ -22,7 +22,7 @@
     *   **Google Veo 3.1** (Standard & Fast)
     *   **OmniHuman**
 *   **🎞️ Auto-Editing**: Automatically stitches generated clips together and muxes them with your original audio.
-*   **📝 EDL Export**: Exports a CMX 3600 `.edl` file, allowing you to import the timeline into Premiere Pro or DaVinci Resolve for fine-tuning.
+*   **📝 EDL Export**: Exports a CMX 3600 `.edl` file with audio tracks, allowing you to import the timeline into Premiere Pro or DaVinci Resolve for fine-tuning.
 *   **🎛️ Granular Control**: Sliders for Creativity, Dynamicity, and Word Influence (Lyric literalism).
 
 ### 🛠️ Installation
@@ -70,6 +70,7 @@ This node requires API keys for the services it uses. You can enter them directl
 *   **`aggressive_edit`**: If `True`, forces cuts strictly on beats and may generate more footage than needed to ensure perfect sync.
 *   **`save_segments`**: Save individual raw video clips from Replicate.
 *   **`save_edl`**: Generate an Edit Decision List for external video editors.
+*   **`use_raw_references`**: If `True`, the system will NOT generate AI assets for items that match the names of your provided reference images. It allows you to fully control specific characters or props by uploading your own images.
 
 ### 📂 Outputs
 
@@ -92,7 +93,7 @@ Wykorzystuje moc **Google Gemini 3 Pro** do głębokiej analizy dźwięku, pisan
 
 *   **🎵 Głęboka Analiza Audio**: Używa Gemini do analizy gatunku, nastroju, tekstu piosenki i struktury dramatycznej, aby idealnie zsynchronizować obraz z muzyką.
 *   **🎨 Automatyczna Dyrekcja Artystyczna**: Samodzielnie definiuje spójny styl wizualny, paletę kolorów i oświetlenie na podstawie klimatu utworu.
-*   **🖼️ Generowanie Zasobów**: Tworzy spójne środowiska, rekwizyty i postacie (aktorów) przed rozpoczęciem "kręcenia".
+*   **🖼️ Generowanie Zasobów**: Tworzy spójne środowiska, rekwizyty, wnętrza pojazdów i postacie (aktorów) przed rozpoczęciem "kręcenia". Obsługuje szczegółowe karty postaci i czyste generowanie rekwizytów.
 *   **🎬 Inteligentny Montaż**: Buduje oś czasu wideo (montaż) dopasowaną do długości utworu, z cięciami zsynchronizowanymi z rytmem i zmianami nastroju.
 *   **🎥 Obsługa Wielu Modeli Wideo**: Wspiera szeroką gamę topowych modeli poprzez Replicate:
     *   **Wan 2.5** (Standard & Fast)
@@ -101,7 +102,7 @@ Wykorzystuje moc **Google Gemini 3 Pro** do głębokiej analizy dźwięku, pisan
     *   **Google Veo 3.1** (Standard & Fast)
     *   **OmniHuman**
 *   **🎞️ Auto-Edycja**: Automatycznie łączy wygenerowane klipy i miksuje je z oryginalnym dźwiękiem.
-*   **📝 Eksport EDL**: Eksportuje plik `.edl` (CMX 3600), umożliwiając import osi czasu do Premiere Pro lub DaVinci Resolve w celu dalszej edycji.
+*   **📝 Eksport EDL**: Eksportuje plik `.edl` (CMX 3600) ze ścieżkami audio, umożliwiając import osi czasu do Premiere Pro lub DaVinci Resolve w celu dalszej edycji.
 *   **🎛️ Precyzyjna Kontrola**: Suwaki do sterowania Kreatywnością, Dynamiką i Wpływem Słów (dosłowność tekstu).
 
 ### 🛠️ Instalacja
@@ -149,6 +150,7 @@ Ten węzeł wymaga kluczy API do serwisów zewnętrznych. Możesz je wprowadzić
 *   **`aggressive_edit`**: Jeśli `True`, wymusza cięcia idealnie na bitach i może generować więcej materiału niż potrzeba, aby zapewnić idealną synchronizację (przycinanie klipów).
 *   **`save_segments`**: Zapisuje pojedyncze surowe klipy wideo z Replicate.
 *   **`save_edl`**: Generuje listę decyzji edycyjnych (EDL) dla zewnętrznych programów montażowych.
+*   **`use_raw_references`**: Jeśli `True`, system NIE wygeneruje zasobów AI dla elementów, które pasują nazwą do dostarczonych obrazów referencyjnych. Pozwala to na pełną kontrolę nad konkretnymi postaciami lub rekwizytami poprzez wgranie własnych grafik.
 
 ### 📂 Wyjścia (Outputs)
 
