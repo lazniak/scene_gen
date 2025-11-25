@@ -1454,7 +1454,7 @@ class SceneGenNode:
             if "actor" in cat: 
                 suffix = "character sheet, face close-up, side profile, full body shot, neutral background, isolated, high detail, concept art"
             elif "prop" in cat: 
-                suffix = "object sheet, isolated on white background, highly detailed, 3d render"
+                suffix = "object sheet, multiple angles (front, side, top), isolated on white background, highly detailed, 3d render, NO HUMANS, NO HANDS, NO FACES, ONLY THE OBJECT"
             elif "env" in cat or "location" in cat: 
                 suffix = "wide shot, empty scene, no people, architectural photography, detailed environment"
 
@@ -1477,18 +1477,21 @@ class SceneGenNode:
             context_assets_added = []
             
             if "actor" in cat:
-                # For Actors: Add Props that are mentioned or logically related
+                # For Actors: Add Props that are mentioned or logically related to build a full character sheet
+                # We want to pull in as many relevant refs as possible (up to 5)
                 for existing_name, existing_img in asset_library.items():
                     if existing_name == name or existing_name == parent_name:
                         continue
                     
-                    # Check if it's a Prop and if it's mentioned in description
+                    # Check if it's a Prop
                     if any(keyword in existing_name.lower() for keyword in ["prop", "item", "object"]):
-                        # Check if prop name is in description (case-insensitive)
-                        if existing_name.lower() in desc.lower() or any(word in desc.lower() for word in existing_name.lower().split('_')):
-                            input_parts.append(existing_img)
-                            context_assets_added.append(existing_name)
-                            if len(input_parts) >= 6: break  # Limit: prompt + parent + 4 context
+                        # Prioritize props mentioned in description, but also include general props if space allows
+                        is_relevant = existing_name.lower() in desc.lower() or any(word in desc.lower() for word in existing_name.lower().split('_'))
+                        
+                        if is_relevant or len(input_parts) < 6: # Fill up to 5 refs (prompt + parent + 4 others)
+                             input_parts.append(existing_img)
+                             context_assets_added.append(existing_name)
+                             if len(input_parts) >= 7: break  # Limit: prompt + parent + 5 context refs
             
             elif "location" in cat or "env" in cat:
                 # For Locations/Environments: Add ALL Actors and relevant Props to populate the scene
