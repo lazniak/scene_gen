@@ -1378,8 +1378,9 @@ class SceneGenNode:
         CRITICAL INSTRUCTION FOR REFERENCE ASSETS:
         - You MUST incorporate the "EXISTING REFERENCE ASSETS" into your story.
         - If a reference is an Actor (e.g., "Host_Man"), use them as a MAIN CHARACTER.
-        - Do NOT create a new/duplicate asset for a character that already exists in references. Use the EXACT "name" from the reference list.
-        - You can add NEW assets, but prioritize using the references where applicable.
+        - If a reference is a Location/Environment (e.g., "Office_Room", "Forest_Clearing"), you MUST use it as a PRIMARY SETTING.
+        - Do NOT create a new/duplicate asset for a character or location that already exists in references. Use the EXACT "name" from the reference list.
+        - You can add NEW assets, but prioritize using the references where applicable. Do NOT invent new locations if a suitable reference location is provided.
         
         CRITICAL INSTRUCTION FOR ASSET DESCRIPTIONS:
         - **For Actors**: If an actor is holding/wearing a Prop, EXPLICITLY MENTION the Prop's name in the description.
