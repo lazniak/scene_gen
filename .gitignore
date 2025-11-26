@@ -15,6 +15,7 @@
 !js/*.js
 !scene-gen_workflow.json
 !edl_export.png
+!preview_player.js
 
 # Keep .git directory (git handles this automatically usually, but good to be safe if I messed with *)
 !.git/

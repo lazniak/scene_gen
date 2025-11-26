@@ -9,7 +9,7 @@
 
 **Scene Gen** is a powerful custom node for ComfyUI that automates the creation of music videos and visual scenes directly from audio input.
 
-[![Demo Video](https://img.youtube.com/vi/seNjjavfd7k/0.jpg)](https://youtu.be/seNjjavfd7k)
+[![My Fan Art Video](https://img.youtube.com/vi/seNjjavfd7k/0.jpg)](https://youtu.be/seNjjavfd7k)
 
 It leverages the power of **Google Gemini 3 Pro** for deep audio analysis, scriptwriting, and asset generation, and integrates with **Replicate** to generate high-quality video clips using state-of-the-art models like Wan, Kling, Hailuo, and Veo.
 
@@ -78,6 +78,16 @@ This node requires API keys for the services it uses. You can enter them directl
 *   **`save_segments`**: Save individual raw video clips from Replicate.
 *   **`save_edl`**: Generate an Edit Decision List for external video editors.
 *   **`use_raw_references`**: If `True`, the system will NOT generate AI assets for items that match the names of your provided reference images. It allows you to fully control specific characters or props by uploading your own images.
+*   **`verification_iterations`**: (0-3) Number of verification passes to refine start frames against references. Higher values improve consistency with reference assets but increase generation time.
+
+### 🎬 Preview Player
+
+The built-in preview player appears in the live HTML report and allows you to:
+- Preview the video montage before full render
+- See synchronized slideshow of start frames
+- Scrub through the timeline
+- Plays in sync with audio based on montage timing
+
 
 ### 📂 Outputs
 
@@ -161,6 +171,16 @@ Ten węzeł wymaga kluczy API do serwisów zewnętrznych. Możesz je wprowadzić
 *   **`save_segments`**: Zapisuje pojedyncze surowe klipy wideo z Replicate.
 *   **`save_edl`**: Generuje listę decyzji edycyjnych (EDL) dla zewnętrznych programów montażowych.
 *   **`use_raw_references`**: Jeśli `True`, system NIE wygeneruje zasobów AI dla elementów, które pasują nazwą do dostarczonych obrazów referencyjnych. Pozwala to na pełną kontrolę nad konkretnymi postaciami lub rekwizytami poprzez wgranie własnych grafik.
+*   **`verification_iterations`**: (0-3) Liczba iteracji weryfikacji klatek startowych względem referencji. Wyższe wartości poprawiają spójność z assetami referencyjnymi, ale wydłużają czas generowania.
+
+### 🎬 Odtwarzacz Preview
+
+Wbudowany odtwarzacz pojawia się w raporcie HTML i pozwala na:
+- Podgląd montażu wideo przed pełnym renderem
+- Zsynchronizowany pokaz slajdów klatek startowych
+- Przesuwanie po osi czasu
+- Odtwarzanie zsynchronizowane z audio według timingu montażu
+
 
 ### 📂 Wyjścia (Outputs)
 

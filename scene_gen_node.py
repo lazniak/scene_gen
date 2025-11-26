@@ -1090,6 +1090,11 @@ class SceneGenNode:
                 if (e.key === 'Escape') document.getElementById('lightbox').style.display = 'none';
             }}
         }});
+        
+        // Load preview player
+        const previewScript = document.createElement('script');
+        previewScript.src = 'preview_player.js';
+        document.body.appendChild(previewScript);
 
         // Init
         setInterval(updateStatus, 2000);
