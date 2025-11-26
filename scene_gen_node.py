@@ -1397,6 +1397,12 @@ class SceneGenNode:
           - "parent_asset": If this is a variant or depends on another asset, name the parent.
           - "is_reference": boolean (true if from reference list)
         
+        CRITICAL IDENTITY INSTRUCTION:
+        - If the User Instruction describes a specific person (e.g., "A young woman with red hair", "The tall man in the suit", "My wife"), you MUST create a specific Actor asset for them.
+        - The Actor's name should reflect this (e.g., "Woman_RedHair", "Man_Tall_Suit", "Wife_Character").
+        - The description MUST be precise and strictly follow the user's details.
+        - In the Storyline, ensure this specific Actor is correctly identified and used. Do NOT genericize them.
+        
         NOTE ON VEHICLES:
         - If the story involves travel inside a vehicle, define a "Vehicle Interior" asset (e.g., "Car_Interior", "Spaceship_Cockpit").
         - This allows consistent framing for all shots inside that vehicle.
@@ -1743,6 +1749,12 @@ class SceneGenNode:
         - Aggressive Edit: {aggressive_edit} (if True: fast cuts, sync to beats)
         - User Instruction: "{instruction}"
         
+        SETUP CONSISTENCY INSTRUCTION:
+        - To maintain spatial consistency, define "Setups" for each scene (e.g., "Wide Shot", "Close Up Actor A").
+        - Assign each clip to a `setup_id` (e.g., "Scene1_SetupA").
+        - Clips with the same `setup_id` MUST have consistent framing and background.
+        - "setup_description": Brief visual description of the camera angle and composition for this setup.
+        
         {model_instruction}
         
         MONTAGE REQUIREMENTS (ALL MANDATORY):
@@ -1791,11 +1803,14 @@ class SceneGenNode:
            - "trim_duration": Final timeline duration (≤ duration)
         
         Return VALID JSON:
+        Return JSON object:
         {{
             "scenes": [
                 {{
                     "description": "...",
                     "assets": ["Asset_Name_1", "Asset_Name_2"],
+                    "setup_id": "Scene1_SetupA",
+                    "setup_description": "Wide shot of the room from the doorway",
                     "sync_reference": "Lyrics 'word' at 12.5s" or "Beat at 3.2s" or "Chorus starts",
                     "model": "google/veo-3.1",
                     "duration": 6.0,
@@ -2036,13 +2051,25 @@ class SceneGenNode:
         report_state["montage"] = final_scenes
         update_report("Stage 8: Generating Start Frames...", 50, "Scene prompts complete.")
 
-        # --- STAGE 8: Image Generation (Start Frames) ---
+        # --- STAGE 8: Image Generation (Start Frames & Setups) ---
         scene_images = []
+        setup_library = {} # setup_id -> Image
+        
         if render_mode == "Full Render":
             update_report("Stage 8: Generating Start Frames...", 55, f"Generating {len(final_scenes)} start frames...")
             print(f"[SceneGen] Stage 8: Generating Start Frames ({len(final_scenes)} scenes)...")
             
             async def gen_scene_image(idx, scene_data):
+                # Check for Setup ID
+                setup_id = scene_data.get("setup_id")
+                setup_desc = scene_data.get("setup_description", "")
+                
+                # If this setup has already been generated, reuse it!
+                if setup_id and setup_id in setup_library:
+                    print(f"[SceneGen] Scene {idx}: Reusing existing Setup Frame '{setup_id}'")
+                    # We still return a copy to ensure list integrity, but we skip generation
+                    return setup_library[setup_id].copy()
+
                 # CRITICAL: NO TEXT ON IMAGES
                 # CRITICAL: NO TEXT ON IMAGES & NO COLLAGES
                 no_text_instruction = "ABSOLUTELY NO TEXT, NO WORDS, NO CAPTIONS, NO TITLES, NO LABELS on the image. Pure visual scene only."
@@ -2159,6 +2186,11 @@ class SceneGenNode:
                                         usage_stats["generated_assets"].append({"name": f"Scene {idx}", "type": "Start Frame", "file": fname})
                                         report_state["assets"].append({"name": f"Scene {idx}", "type": "Start Frame", "file": fname, "prompt": prompt})
                                     usage_stats["gemini_images_generated"] += 1 # Track image generation
+                                    
+                                    # Store in Setup Library if applicable
+                                    if setup_id:
+                                        setup_library[setup_id] = img
+                                        
                                     return img
                     except asyncio.TimeoutError:
                         print(f"[SceneGen] WARNING: Scene {idx} timed out (Attempt {attempt+1}/{max_retries}). Retrying...")
