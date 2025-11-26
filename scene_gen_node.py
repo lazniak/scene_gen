@@ -1240,7 +1240,15 @@ class SceneGenNode:
         - "style_instruction": A comprehensive style description (e.g., "Cyberpunk noir with neon lighting and grainy film texture").
         """
         track_text(prompt_s2, "")
-        resp_s2 = await model_text.generate_content_async(prompt_s2)
+        max_retries_s2 = 3
+        for attempt in range(max_retries_s2):
+            try:
+                resp_s2 = await model_text.generate_content_async(prompt_s2)
+                break
+            except Exception as e:
+                print(f"[SceneGen] Stage 2 Error (Attempt {attempt+1}/{max_retries_s2}): {e}")
+                if attempt == max_retries_s2 - 1: raise
+                await asyncio.sleep(2 ** attempt)
         debug_s2 = resp_s2.text
         track_text("", debug_s2)
         with open(os.path.join(session_dir, "stage2_style.json"), "w", encoding="utf-8") as f: f.write(debug_s2)
