@@ -26,7 +26,7 @@ import threading
 import socket
 import math
 
-class SceneGenMusicVideoNode:
+class SceneGenMoviesNode:
     def __init__(self):
         # Locate ComfyUI output directory
         self.output_dir = folder_paths.get_output_directory()
@@ -97,7 +97,7 @@ class SceneGenMusicVideoNode:
         "Cost Data (JSON)", "Final Video Path"
     )
     FUNCTION = "process"
-    CATEGORY = "SceneGen/MusicVideo"
+    CATEGORY = "SceneGen/Movies"
 
     def process(self, audio, gemini_api_key, replicate_api_token, prompt_instruction, filename_prefix, fps, model_text, model_image, creativity, dynamicity, video_quality, aspect_ratio, resolution_multiplier, enable_prompt_expansion, save_segments, save_images, save_assets, gemini_concurrency, replicate_concurrency, use_wan_fast, use_wan_2_5, use_kling_turbo, use_omni_human, use_hailuo, use_hailuo_fast, use_veo_3_1, use_veo_3_1_fast, aggressive_edit, word_influence, save_edl, open_coffee_link, render_mode, dialogues_gen, open_report, mix_native_audio, audio_volume, video_volume, normalize_audio, use_raw_references, verification_iterations, reference_images=None):
         print(f"\n[SceneGen] === Starting Iterative Process ===")
@@ -3438,16 +3438,17 @@ class SceneGenCostAnalyzer:
         return (report_path,)
 
 NODE_CLASS_MAPPINGS = {
-    'SceneGenMusicVideoNode': SceneGenMusicVideoNode,
+    'SceneGenMoviesNode': SceneGenMoviesNode,
     'SceneGenExtractor': SceneGenExtractor,
     'SceneGenVideoPlayer': SceneGenVideoPlayer,
     'StringifyTextInput': StringifyTextInput
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    'SceneGenMusicVideoNode': 'SceneGen - MusicVideo',
+    'SceneGenMoviesNode': 'SceneGen - Movies',
     'SceneGenExtractor': 'Scene Gen Data Extractor',
     'SceneGenVideoPlayer': 'Scene Gen Video Player',
     'StringifyTextInput': 'Stringify Text Input'
 }
+
 
