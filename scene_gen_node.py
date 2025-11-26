@@ -78,6 +78,7 @@ class SceneGenNode:
                 "video_volume": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.1, "tooltip": "Volume level for the generated video audio (1.0 = 100%)."}),
                 "normalize_audio": ("BOOLEAN", {"default": False, "tooltip": "If True, applies loudness normalization to the final mixed audio."}),
                 "use_raw_references": ("BOOLEAN", {"default": False, "tooltip": "If True, only generates assets that are NOT present in the provided reference images."}),
+                "verification_iterations": ("INT", {"default": 0, "min": 0, "max": 3, "tooltip": "Number of verification passes to refine start frames against references. 0 = disabled, 1-3 = iterative improvement."}),
             },
             "optional": {
                 "reference_images": ("IMAGE", {"tooltip": "Optional images to use as references for style, characters, or environments."}),
@@ -98,7 +99,7 @@ class SceneGenNode:
     FUNCTION = "process"
     CATEGORY = "Scene Gen"
 
-    def process(self, audio, gemini_api_key, replicate_api_token, prompt_instruction, filename_prefix, fps, model_text, model_image, creativity, dynamicity, video_quality, aspect_ratio, resolution_multiplier, enable_prompt_expansion, save_segments, save_images, save_assets, gemini_concurrency, replicate_concurrency, use_wan_fast, use_wan_2_5, use_kling_turbo, use_omni_human, use_hailuo, use_hailuo_fast, use_veo_3_1, use_veo_3_1_fast, aggressive_edit, word_influence, save_edl, open_coffee_link, render_mode, dialogues_gen, open_report, mix_native_audio, audio_volume, video_volume, normalize_audio, use_raw_references, reference_images=None):
+    def process(self, audio, gemini_api_key, replicate_api_token, prompt_instruction, filename_prefix, fps, model_text, model_image, creativity, dynamicity, video_quality, aspect_ratio, resolution_multiplier, enable_prompt_expansion, save_segments, save_images, save_assets, gemini_concurrency, replicate_concurrency, use_wan_fast, use_wan_2_5, use_kling_turbo, use_omni_human, use_hailuo, use_hailuo_fast, use_veo_3_1, use_veo_3_1_fast, aggressive_edit, word_influence, save_edl, open_coffee_link, render_mode, dialogues_gen, open_report, mix_native_audio, audio_volume, video_volume, normalize_audio, use_raw_references, verification_iterations, reference_images=None):
         print(f"\n[SceneGen] === Starting Iterative Process ===")
         
         if not gemini_api_key: raise ValueError("Gemini API Key is required.")
@@ -143,7 +144,7 @@ class SceneGenNode:
                 enable_prompt_expansion, save_segments, save_images, save_assets, gemini_concurrency, replicate_concurrency,
                 use_wan_fast, use_wan_2_5, use_kling_turbo, use_omni_human, use_hailuo, use_hailuo_fast, use_veo_3_1, use_veo_3_1_fast, 
                 aggressive_edit, word_influence, save_edl, ref_images_pil, render_mode, dialogues_gen, open_report,
-                mix_native_audio, audio_volume, video_volume, normalize_audio, use_raw_references
+                mix_native_audio, audio_volume, video_volume, normalize_audio, use_raw_references, verification_iterations
             ))
             result = future.result()
             
@@ -156,7 +157,7 @@ class SceneGenNode:
             print(f"[SceneGen] === Process Complete ===\n")
             return result
 
-    async def async_process(self, audio_data, sample_rate, instruction, prefix, session_dir, fps, model_text_name, model_image_name, creativity, dynamicity, video_quality, aspect_ratio, resolution_multiplier, enable_prompt_expansion, save_segments, save_images, save_assets, gemini_concurrency, replicate_concurrency, use_wan_fast, use_wan_2_5, use_kling_turbo, use_omni_human, use_hailuo, use_hailuo_fast, use_veo_3_1, use_veo_3_1_fast, aggressive_edit, word_influence, save_edl, ref_images_pil, render_mode, dialogues_gen, open_report, mix_native_audio, audio_volume, video_volume, normalize_audio, use_raw_references):
+    async def async_process(self, audio_data, sample_rate, instruction, prefix, session_dir, fps, model_text_name, model_image_name, creativity, dynamicity, video_quality, aspect_ratio, resolution_multiplier, enable_prompt_expansion, save_segments, save_images, save_assets, gemini_concurrency, replicate_concurrency, use_wan_fast, use_wan_2_5, use_kling_turbo, use_omni_human, use_hailuo, use_hailuo_fast, use_veo_3_1, use_veo_3_1_fast, aggressive_edit, word_influence, save_edl, ref_images_pil, render_mode, dialogues_gen, open_report, mix_native_audio, audio_volume, video_volume, normalize_audio, use_raw_references, verification_iterations):
         
         # Usage Tracking
         usage_stats = {
@@ -1512,23 +1513,6 @@ class SceneGenNode:
             
             # 1. Add Parent Asset (Direct Dependency)
             if parent_name and parent_name in asset_library:
-                input_parts.append(asset_library[parent_name])
-                print(f"  -> Generating {name} using parent {parent_name}")
-            
-            # 2. Add Contextual Assets - ENHANCED LOGIC
-            # Strategy:
-            # - For Props: No additional context (they're isolated objects)
-            # - For Actors: Add Props mentioned in description
-            # - For Locations/Environments: Add ALL relevant Actors and Props that might be in this scene
-            
-            context_assets_added = []
-            
-            if "actor" in cat:
-                # For Actors: Add Props that are mentioned or logically related to build a full character sheet
-                # We want to pull in as many relevant refs as possible (up to 5)
-                for existing_name, existing_img in asset_library.items():
-                    if existing_name == name or existing_name == parent_name:
-                        continue
                     
                     # Check if it's a Prop
                     if any(keyword in existing_name.lower() for keyword in ["prop", "item", "object"]):
@@ -2257,6 +2241,95 @@ class SceneGenNode:
                 print(f"[SceneGen] Completed Start Frames Batch {i//chunk_size + 1}: scenes {start_idx}‑{end_idx}")
             
             update_report(None, 65, "Start frames generated.")
+            
+            # --- STAGE 8.5: Verification & Refinement ---
+            if verification_iterations > 0 and len(ref_images_pil) > 0:
+                print(f"[SceneGen] Stage 8.5: Verifying Start Frames ({verification_iterations} iterations)...")
+                update_report("Stage 8.5: Verifying Frames...", 67, f"Refining frames against references ({verification_iterations} iterations)...")
+                
+                async def verify_and_refine_frame(idx, img, scene_data):
+                    """Verify a frame against references and refine if needed."""
+                    setup_id = scene_data.get("setup_id")
+                    scene_desc = scene_data.get("positive_prompt", scene_data.get("description", ""))
+                    assets_used = scene_data.get("assets", [])
+                    
+                    # Build reference context for this scene
+                    ref_context = []
+                    for asset_name in assets_used:
+                        if asset_name in asset_library:
+                            ref_context.append(asset_library[asset_name])
+                    
+                    # If no references, skip verification
+                    if not ref_context:
+                        return img
+                    
+                    # Limit to 3 reference images to avoid payload issues
+                    ref_context = ref_context[:3]
+                    
+                    current_frame = img
+                    
+                    for iteration in range(verification_iterations):
+                        # Build verification prompt
+                        verify_prompt = f"""CRITICAL VERIFICATION TASK:
+                        
+Compare the GENERATED FRAME (first image) with the REFERENCE ASSETS (following images).
+
+Scene Requirements: {scene_desc}
+Assets To Use: {', '.join(assets_used)}
+
+VERIFICATION CHECKLIST:
+1. **Identity Match**: Do the characters/objects in the generated frame match the visual identity of the reference assets?
+2. **Consistency**: Are colors, shapes, and details consistent with references?
+3. **Composition**: Is the framing and layout appropriate for the scene description?
+
+If discrepancies are found, generate a CORRECTED version that:
+- Maintains the exact visual identity from references
+- Fixes any mismatches in appearance, color, or style
+- Keeps the scene description intent
+
+IMPORTANT: Only generate if corrections are needed. If the frame is already correct, return the same image.
+"""
+                        
+                        # Combine current frame + references
+                        input_parts = [verify_prompt, current_frame] + ref_context
+                        
+                        try:
+                            resp = await asyncio.wait_for(
+                                model_image_gen.generate_content_async(input_parts),
+                                timeout=60
+                            )
+                            
+                            if hasattr(resp, 'parts'):
+                                for p in resp.parts:
+                                    if hasattr(p, 'inline_data'):
+                                        refined_img = Image.open(io.BytesIO(p.inline_data.data))
+                                        refined_img = refined_img.resize((img_w, img_h))
+                                        current_frame = refined_img
+                                        print(f"[SceneGen] Scene {idx}: Refined (iteration {iteration+1})")
+                                        break
+                        except Exception as e:
+                            print(f"[SceneGen] Scene {idx}: Verification iteration {iteration+1} failed: {e}")
+                    
+                    # Update setup library if this was a setup frame
+                    if setup_id and setup_id in setup_library:
+                        setup_library[setup_id] = current_frame
+                    
+                    return current_frame
+                
+                # Verify frames with concurrency control
+                verified_images = []
+                verify_tasks = [verify_and_refine_frame(i, img, scene) for i, (img, scene) in enumerate(zip(scene_images, final_scenes))]
+                
+                for i in range(0, len(verify_tasks), gemini_concurrency // 2):  # Lower concurrency for verification
+                    chunk = verify_tasks[i:i+gemini_concurrency//2]
+                    batch_results = await asyncio.gather(*chunk)
+                    verified_images.extend(batch_results)
+                    print(f"[SceneGen] Verified batch {i//(gemini_concurrency//2) + 1}")
+                
+                scene_images = verified_images
+                update_report(None, 70, f"Verification complete ({verification_iterations} iterations).")
+            
+        
         else:
             update_report("Stage 8: Skipped (Prompt Mode - Text Only)", 65, "Skipping start frame generation.")
             print("[SceneGen] Stage 8: Skipped (Prompt Mode - Text Only)")
