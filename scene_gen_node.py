@@ -143,7 +143,7 @@ class SceneGenNode:
                 enable_prompt_expansion, save_segments, save_images, save_assets, gemini_concurrency, replicate_concurrency,
                 use_wan_fast, use_wan_2_5, use_kling_turbo, use_omni_human, use_hailuo, use_hailuo_fast, use_veo_3_1, use_veo_3_1_fast, 
                 aggressive_edit, word_influence, save_edl, ref_images_pil, render_mode, dialogues_gen, open_report,
-                mix_native_audio, audio_volume, video_volume, normalize_audio
+                mix_native_audio, audio_volume, video_volume, normalize_audio, use_raw_references
             ))
             result = future.result()
             
@@ -156,7 +156,7 @@ class SceneGenNode:
             print(f"[SceneGen] === Process Complete ===\n")
             return result
 
-    async def async_process(self, audio_data, sample_rate, instruction, prefix, session_dir, fps, model_text_name, model_image_name, creativity, dynamicity, video_quality, aspect_ratio, resolution_multiplier, enable_prompt_expansion, save_segments, save_images, save_assets, gemini_concurrency, replicate_concurrency, use_wan_fast, use_wan_2_5, use_kling_turbo, use_omni_human, use_hailuo, use_hailuo_fast, use_veo_3_1, use_veo_3_1_fast, aggressive_edit, word_influence, save_edl, ref_images_pil, render_mode, dialogues_gen, open_report, mix_native_audio, audio_volume, video_volume, normalize_audio):
+    async def async_process(self, audio_data, sample_rate, instruction, prefix, session_dir, fps, model_text_name, model_image_name, creativity, dynamicity, video_quality, aspect_ratio, resolution_multiplier, enable_prompt_expansion, save_segments, save_images, save_assets, gemini_concurrency, replicate_concurrency, use_wan_fast, use_wan_2_5, use_kling_turbo, use_omni_human, use_hailuo, use_hailuo_fast, use_veo_3_1, use_veo_3_1_fast, aggressive_edit, word_influence, save_edl, ref_images_pil, render_mode, dialogues_gen, open_report, mix_native_audio, audio_volume, video_volume, normalize_audio, use_raw_references):
         
         # Usage Tracking
         usage_stats = {
