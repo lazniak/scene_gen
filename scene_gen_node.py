@@ -1515,6 +1515,7 @@ class SceneGenMusicVideoNode:
             full_prompt = f"{no_text} {style_instruction}. {desc}. {suffix}. {palette_data.get('lighting_mood', '')} --aspect {aspect_ratio}"
             
             input_parts = [full_prompt]
+            context_assets_added = []
             
             # 1. Add Parent Asset (Direct Dependency)
             if parent_name and parent_name in asset_library:
