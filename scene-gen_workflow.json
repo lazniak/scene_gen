@@ -101,7 +101,7 @@
     },
     {
       "id": 4,
-      "type": "SceneGenNode",
+      "type": "SceneGenMusicVideoNode",
       "pos": [
         50,
         -100
@@ -255,7 +255,7 @@
         }
       ],
       "properties": {
-        "Node name for S&R": "SceneGenNode"
+        "Node name for S&R": "SceneGenMusicVideoNode"
       },
       "widgets_values": [
         "Your_Gemini_Key_Here",
@@ -295,7 +295,8 @@
         1,
         1,
         false,
-        false
+        false,
+        0
       ]
     },
     {

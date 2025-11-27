@@ -17,6 +17,7 @@
 !edl_export.png
 !preview_player.js
 !scene_gen_movies_node.py
+!scene-gen-movies_workflow.json
 
 # Keep .git directory (git handles this automatically usually, but good to be safe if I messed with *)
 !.git/

@@ -59,8 +59,10 @@ This node requires API keys for the services it uses. You can enter them directl
 
 ### 🚀 Usage
 
-1.  **Add the Node**: Right-click in ComfyUI -> `Scene Gen` -> `Scene Gen`.
-2.  **Connect Audio**: Load your music file using a standard `Load Audio` node and connect it to the `audio` input.
+1.  **Select a Node**: Right-click in ComfyUI -> `SceneGen` -> `MusicVideo` -> `SceneGen - MusicVideo` OR `SceneGen` -> `Movies` -> `SceneGen - Movies`.
+    *   **MusicVideo**: Best for music videos, syncing visuals to beats and lyrics.
+    *   **Movies**: Best for narrative storytelling, dialogue, and script-based content.
+2.  **Connect Audio**: Load your audio file using a standard `Load Audio` node and connect it to the `audio` input.
 3.  **Enter API Keys**: Paste your Gemini and Replicate keys.
 4.  **Set Instructions**: In `prompt_instruction`, describe what you want to see (e.g., "A futuristic cyberpunk chase", "A calm nature documentary").
 5.  **Select Models**: Enable the video models you want the AI to choose from (Wan, Kling, Veo, etc.).
@@ -152,8 +154,10 @@ Ten węzeł wymaga kluczy API do serwisów zewnętrznych. Możesz je wprowadzić
 
 ### 🚀 Użycie
 
-1.  **Dodaj Węzeł**: Kliknij prawym przyciskiem w ComfyUI -> `Scene Gen` -> `Scene Gen`.
-2.  **Podłącz Audio**: Załaduj plik muzyczny używając standardowego węzła `Load Audio` i podłącz go do wejścia `audio`.
+1.  **Wybierz Węzeł**: Kliknij prawym przyciskiem w ComfyUI -> `SceneGen` -> `MusicVideo` -> `SceneGen - MusicVideo` LUB `SceneGen` -> `Movies` -> `SceneGen - Movies`.
+    *   **MusicVideo**: Najlepszy do teledysków, synchronizacji z bitem i tekstem piosenki.
+    *   **Movies**: Najlepszy do opowiadania historii, dialogów i treści opartych na scenariuszu.
+2.  **Podłącz Audio**: Załaduj plik audio używając standardowego węzła `Load Audio` i podłącz go do wejścia `audio`.
 3.  **Wprowadź Klucze**: Wklej swoje klucze Gemini i Replicate.
 4.  **Ustaw Instrukcje**: W polu `prompt_instruction` opisz, co chcesz zobaczyć (np. "Futurystyczny pościg w cyberpunku", "Spokojny dokument przyrodniczy").
 5.  **Wybierz Modele**: Włącz modele wideo, z których AI ma korzystać (Wan, Kling, Veo itp.).
