@@ -1,7 +1,7 @@
 [project]
 name = "scene_gen"
 version = "1.0.5"
-description = """Transform your music into professional music videos with AI automation. This powerful node uses <b>Gemini AI</b> for intelligent audio analysis and <b>Replicate cutting-edge video models</b> (Wan 2.5, Kling Turbo, Veo 3.1, Hailuo) to generate synchronized visual content. Features <b>automated scene planning</b>, <b>character consistency</b>, <b>beat-perfect editing</b>, and seamless integration with Premiere Pro/DaVinci Resolve via <b>EDL export</b>. <b>Export nodes and prompts for free rendering</b>. <b>Google Gemini functions only as an agent engine</b> for analysis and orchestration, not for generating images or videos."""
+description = """Transform your music into professional music videos with AI automation. This powerful node uses Gemini AI for intelligent audio analysis and Replicate cutting-edge video models (Wan 2.5, Kling Turbo, Veo 3.1, Hailuo) to generate synchronized visual content. Features automated scene planning, character consistency, beat-perfect editing, and seamless integration with Premiere Pro/DaVinci Resolve via EDL export. Export nodes and prompts for free rendering. Google Gemini functions only as an agent engine for analysis and orchestration, not for generating images or videos."""
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "Custom" }
