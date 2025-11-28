@@ -1237,7 +1237,7 @@ class SceneGenMusicVideoNode:
                     model_text.generate_content_async([prompt_s1, {"mime_type": "audio/wav", "data": audio_bytes}]),
                     timeout=api_timeout
                 )
-        debug_s1 = resp_s1.text
+                debug_s1 = resp_s1.text
                 print(f"[SceneGen] Stage 1: Received response from Gemini ({len(debug_s1)} characters)")
                 break
             except asyncio.TimeoutError:
@@ -1474,7 +1474,7 @@ class SceneGenMusicVideoNode:
                     model_text.generate_content_async([prompt_s3_plan, {"mime_type": "audio/wav", "data": audio_bytes}]),
                     timeout=api_timeout
                 )
-        debug_s3_plan = resp_s3_plan.text
+                debug_s3_plan = resp_s3_plan.text
                 print(f"[SceneGen] Stage 3: Narrative Planning - Received response from Gemini ({len(debug_s3_plan)} characters)")
                 break
             except asyncio.TimeoutError:
@@ -1524,7 +1524,7 @@ class SceneGenMusicVideoNode:
                     model_text.generate_content_async(prompt_s3),
                     timeout=api_timeout
                 )
-        debug_s3 = resp_s3.text
+                debug_s3 = resp_s3.text
                 print(f"[SceneGen] Stage 3: Color Palette - Received response from Gemini ({len(debug_s3)} characters)")
                 break
             except asyncio.TimeoutError:
@@ -2839,7 +2839,9 @@ Return JSON ONLY:
                     print(f"✗ Task {idx} FAILED COMPLETELY: {e}")
                     raise e
                 finally:
-                    try: os.unlink(img_path); os.unlink(aud_path)
+                    try:
+                        os.unlink(img_path)
+                        os.unlink(aud_path)
                     except: pass
 
             loop = asyncio.get_running_loop()
@@ -3363,7 +3365,9 @@ class SceneGenCostAnalyzer:
         for model, seconds in data.get("replicate_seconds", {}).items():
             rate = DEFAULT_REP_PRICE
             for k, v in PRICE_REPLICATE.items():
-                if k in model: rate = v; break
+                if k in model:
+                    rate = v
+                    break
             cost = seconds * rate
             c_rep += cost
             rep_details += f"<tr><td>{model}</td><td>{seconds:.1f}s</td><td>${cost:.4f}</td></tr>"
