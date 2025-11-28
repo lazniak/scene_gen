@@ -17,6 +17,7 @@
 !web/*.js
 !scene-gen_workflow.json
 !edl_export.png
+!node-preview.png
 !preview_player.js
 !scene_gen_movies_node.py
 !scene-gen-movies_workflow.json

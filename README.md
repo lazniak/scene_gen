@@ -9,6 +9,8 @@
 
 **Scene Gen** is a powerful custom node for ComfyUI that automates the creation of music videos and visual scenes directly from audio input.
 
+![Scene Gen Node Preview](node-preview.png)
+
 [![My Fan Art Video](https://img.youtube.com/vi/seNjjavfd7k/0.jpg)](https://youtu.be/seNjjavfd7k)
 
 It leverages the power of **Google Gemini 3 Pro** for deep audio analysis, scriptwriting, and asset generation, and integrates with **Replicate** to generate high-quality video clips using state-of-the-art models like Wan, Kling, Hailuo, and Veo.
@@ -103,6 +105,8 @@ The built-in preview player appears in the live HTML report and allows you to:
 ## 🇵🇱 Polski
 
 **Scene Gen** to zaawansowany węzeł (node) dla ComfyUI, który automatyzuje tworzenie teledysków i scen wideo bezpośrednio z pliku audio.
+
+![Scene Gen Node Preview](node-preview.png)
 
 [![Demo Wideo](https://img.youtube.com/vi/wtxXUM1-4F8/0.jpg)](https://www.youtube.com/shorts/wtxXUM1-4F8)
 
