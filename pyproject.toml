@@ -18,6 +18,5 @@ Repository = "https://github.com/lazniak/scene_gen"
 
 [tool.comfy]
 PublisherId = "lazniak"
-NodeId = "scene-gen"
-DisplayName = "Scene Gen"
+DisplayName = "Scene Gen - Agent for music videos"
 Icon = ""
