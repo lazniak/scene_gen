@@ -1,0 +1,22 @@
+[project]
+name = "scene-gen"
+version = "1.0.0"
+description = "Automates the creation of music videos and visual scenes directly from audio input using Google Gemini and Replicate."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+dependencies = [
+    "google-generativeai",
+    "numpy",
+    "scipy",
+    "replicate",
+    "requests"
+]
+
+[project.urls]
+Repository = "https://github.com/lazniak/scene_gen"
+
+[tool.comfy]
+PublisherId = "lazniak"
+DisplayName = "Scene Gen"
+Icon = ""

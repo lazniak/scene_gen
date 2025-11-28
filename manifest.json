@@ -1,0 +1,12 @@
+{
+    "name": "Scene Gen",
+    "version": "1.0.3",
+    "author": "User",
+    "description": "A ComfyUI custom node that generates scene prompts and images from audio input using Google Gemini 3 Pro models.",
+    "license": "Custom License (Non-Commercial)",
+    "requirements": [
+        "google-generativeai",
+        "numpy",
+        "scipy"
+    ]
+}
