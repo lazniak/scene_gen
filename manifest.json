@@ -1,8 +1,8 @@
 {
     "name": "Scene Gen",
-    "version": "1.0.3",
-    "author": "User",
-    "description": "A ComfyUI custom node that generates scene prompts and images from audio input using Google Gemini 3 Pro models.",
+    "version": "1.0.5",
+    "author": "PabloGFX",
+    "description": "Transform your music into professional music videos with AI automation. This powerful node uses Gemini AI for intelligent audio analysis and Replicate cutting-edge video models (Wan 2.5, Kling Turbo, Veo 3.1, Hailuo) to generate synchronized visual content. Features automated scene planning, character consistency, beat-perfect editing, and seamless integration with Premiere Pro DaVinci Resolve via EDL export. Export nodes and prompts for free rendering. Google Gemini functions only as an agent engine for analysis and orchestration, not for generating images or videos.",
     "license": "Custom License (Non-Commercial)",
     "requirements": [
         "google-generativeai",
