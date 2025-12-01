@@ -1,5 +1,11 @@
 # Scene Gen Node for ComfyUI
 
+**Tutorial for Musicians:
+
+[![My Fan Art Video](https://img.youtube.com/vi/SNz9nRVJyKY/0.jpg)](https://youtu.be/SNz9nRVJyKY)
+
+
+
 [English](#english) | [Polski](#polski)
 
 ---
